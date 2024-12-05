@@ -8,7 +8,7 @@ require (
 	github.com/psanford/memfs v0.0.0-20240922203233-02fb08c0f8db
 	github.com/rivo/tview v0.0.0-20240921122403-a64fc48d7654
 	github.com/stretchr/testify v1.9.0
-	golang.org/x/sync v0.9.0
+	golang.org/x/sync v0.10.0
 )
 
 require (

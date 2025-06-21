@@ -2,7 +2,8 @@ package profile
 
 import (
 	"fmt"
-	"github.com/clambin/videoConvertor/internal/ffmpeg"
+
+	"github.com/clambin/videoConvertor/ffmpeg"
 )
 
 // https://www.yololiv.com/blog/h265-vs-h264-whats-the-difference-which-is-better/

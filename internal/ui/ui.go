@@ -2,30 +2,31 @@ package ui
 
 import (
 	"context"
+	"time"
+
 	"github.com/clambin/videoConvertor/internal/configuration"
-	"github.com/clambin/videoConvertor/internal/worklist"
+	"github.com/clambin/videoConvertor/internal/pipeline"
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
-	"time"
 )
 
 type UI struct {
-	Root  *tview.Grid
-	pages *tview.Pages
-	*header
-	*workListViewer
-	*LogViewer
+	Root        *tview.Grid
+	pages       *tview.Pages
+	header      *header
+	queueViewer *queueViewer
+	LogViewer   *LogViewer
 }
 
 type Application interface {
 	QueueUpdateDraw(func()) *tview.Application
 }
 
-func New(list *worklist.WorkList, cfg configuration.Configuration) *UI {
+func New(list *pipeline.Queue, cfg configuration.Configuration) *UI {
 	h := newHeader(list, cfg)
 	b := tview.NewPages()
 
-	wlv := newWorkListViewer(list)
+	wlv := newQueueViewer(list)
 	b.AddPage("worklist", wlv, true, true)
 	h.shortcutsView.addPage("worklist", workListShortCuts, true)
 	lv := newLogViewer()
@@ -37,11 +38,11 @@ func New(list *worklist.WorkList, cfg configuration.Configuration) *UI {
 	root.AddItem(b, 1, 0, 3, 1, 0, 0, true)
 
 	u := UI{
-		Root:           root,
-		pages:          b,
-		header:         h,
-		workListViewer: wlv,
-		LogViewer:      lv,
+		Root:        root,
+		pages:       b,
+		header:      h,
+		queueViewer: wlv,
+		LogViewer:   lv,
 	}
 
 	u.Root.SetInputCapture(u.handleInput)
@@ -65,7 +66,7 @@ func (u *UI) Run(ctx context.Context, app Application, interval time.Duration) {
 
 func (u *UI) refresh() {
 	u.header.refresh()
-	u.workListViewer.refresh()
+	u.queueViewer.refresh()
 }
 
 func (u *UI) handleInput(event *tcell.EventKey) *tcell.EventKey {
@@ -78,13 +79,13 @@ func (u *UI) handleInput(event *tcell.EventKey) *tcell.EventKey {
 			case "worklist":
 				u.pages.HidePage("worklist")
 				u.pages.ShowPage("logs")
-				u.shortcutsView.Pages.HidePage("worklist")
-				u.shortcutsView.Pages.ShowPage("logs")
+				u.header.shortcutsView.HidePage("worklist")
+				u.header.shortcutsView.ShowPage("logs")
 			case "logs":
 				u.pages.HidePage("logs")
 				u.pages.ShowPage("worklist")
-				u.shortcutsView.Pages.HidePage("logs")
-				u.shortcutsView.Pages.ShowPage("worklist")
+				u.header.shortcutsView.HidePage("logs")
+				u.header.shortcutsView.ShowPage("worklist")
 			}
 			return nil
 		default:

@@ -1,58 +1,59 @@
-package worklist
+package pipeline
 
 import (
-	"github.com/clambin/videoConvertor/internal/ffmpeg"
 	"iter"
 	"slices"
 	"strconv"
 	"sync"
 	"time"
+
+	"github.com/clambin/videoConvertor/ffmpeg"
 )
 
-type WorkList struct {
-	list   []*WorkItem
-	queued []*WorkItem
-	lock   sync.RWMutex
-	active bool
+type Queue struct {
+	queue   []*WorkItem
+	waiting []*WorkItem
+	lock    sync.RWMutex
+	active  bool
 }
 
-func (wl *WorkList) Add(filename string) *WorkItem {
-	wl.lock.Lock()
-	defer wl.lock.Unlock()
+func (q *Queue) Add(filename string) *WorkItem {
+	q.lock.Lock()
+	defer q.lock.Unlock()
 	item := &WorkItem{Source: filename}
-	wl.list = append(wl.list, item)
+	q.queue = append(q.queue, item)
 	return item
 }
 
-func (wl *WorkList) NextToConvert() *WorkItem {
-	// convert any items the user manually asked to convert?
-	if item := wl.dequeue(); item != nil {
+func (q *Queue) NextToConvert() *WorkItem {
+	// convert any items the user manually asked to convert
+	if item := q.dequeue(); item != nil {
 		return item
 	}
-	// is the worklist active?
-	if !wl.Active() {
+	// is the queue active?
+	if !q.Active() {
 		return nil
 	}
 	// return the next item ready for conversion
-	return wl.checkout(Inspected, Converting)
+	return q.checkout(Inspected, Converting)
 }
 
-func (wl *WorkList) dequeue() *WorkItem {
-	wl.lock.Lock()
-	defer wl.lock.Unlock()
+func (q *Queue) dequeue() *WorkItem {
+	q.lock.Lock()
+	defer q.lock.Unlock()
 	var item *WorkItem
-	if len(wl.queued) > 0 {
-		item = wl.queued[0]
+	if len(q.waiting) > 0 {
+		item = q.waiting[0]
 		item.SetStatus(Converting, nil)
-		wl.queued = wl.queued[1:]
+		q.waiting = q.waiting[1:]
 	}
 	return item
 }
 
-func (wl *WorkList) checkout(current, next WorkStatus) *WorkItem {
-	wl.lock.RLock()
-	defer wl.lock.RUnlock()
-	for _, item := range wl.list {
+func (q *Queue) checkout(current, next WorkStatus) *WorkItem {
+	q.lock.RLock()
+	defer q.lock.RUnlock()
+	for _, item := range q.queue {
 		if status, _ := item.Status(); status == current {
 			item.SetStatus(next, nil)
 			return item
@@ -62,31 +63,31 @@ func (wl *WorkList) checkout(current, next WorkStatus) *WorkItem {
 }
 
 // Queue adds an item ready to be converted. This item will be processed, regardless of whether the queue is active or not.
-func (wl *WorkList) Queue(item *WorkItem) {
-	wl.lock.Lock()
-	defer wl.lock.Unlock()
-	wl.queued = append(wl.queued, item)
+func (q *Queue) Queue(item *WorkItem) {
+	q.lock.Lock()
+	defer q.lock.Unlock()
+	q.waiting = append(q.waiting, item)
 }
 
-// List returns all WorkItem records in the list. This clones the contained slice. For performance reasons,
+// List returns all items in the queue. This clones the contained slice. For performance reasons,
 // this should only be used for testing. Use All(), which returns an iterator, instead.
-func (wl *WorkList) List() []*WorkItem {
-	wl.lock.RLock()
-	defer wl.lock.RUnlock()
-	return slices.Clone(wl.list)
+func (q *Queue) List() []*WorkItem {
+	q.lock.RLock()
+	defer q.lock.RUnlock()
+	return slices.Clone(q.queue)
 }
 
-func (wl *WorkList) Size() int {
-	wl.lock.RLock()
-	defer wl.lock.RUnlock()
-	return len(wl.list)
+func (q *Queue) Size() int {
+	q.lock.RLock()
+	defer q.lock.RUnlock()
+	return len(q.queue)
 }
 
-func (wl *WorkList) All() iter.Seq[*WorkItem] {
+func (q *Queue) All() iter.Seq[*WorkItem] {
 	return func(yield func(*WorkItem) bool) {
-		wl.lock.RLock()
-		defer wl.lock.RUnlock()
-		for _, item := range wl.list {
+		q.lock.RLock()
+		defer q.lock.RUnlock()
+		for _, item := range q.queue {
 			if !yield(item) {
 				return
 			}
@@ -94,22 +95,22 @@ func (wl *WorkList) All() iter.Seq[*WorkItem] {
 	}
 }
 
-func (wl *WorkList) Active() bool {
-	wl.lock.RLock()
-	defer wl.lock.RUnlock()
-	return wl.active
+func (q *Queue) Active() bool {
+	q.lock.RLock()
+	defer q.lock.RUnlock()
+	return q.active
 }
 
-func (wl *WorkList) SetActive(active bool) {
-	wl.lock.Lock()
-	defer wl.lock.Unlock()
-	wl.active = active
+func (q *Queue) SetActive(active bool) {
+	q.lock.Lock()
+	defer q.lock.Unlock()
+	q.active = active
 }
 
-func (wl *WorkList) ToggleActive() {
-	wl.lock.Lock()
-	defer wl.lock.Unlock()
-	wl.active = !wl.active
+func (q *Queue) ToggleActive() {
+	q.lock.Lock()
+	defer q.lock.Unlock()
+	q.active = !q.active
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -152,9 +153,9 @@ type WorkItem struct {
 	Source      string
 	sourceStats ffmpeg.VideoStats
 	targetStats ffmpeg.VideoStats
-	Progress
-	status WorkStatus
-	lock   sync.RWMutex
+	Progress    Progress
+	status      WorkStatus
+	lock        sync.RWMutex
 }
 
 func (w *WorkItem) Status() (WorkStatus, error) {
@@ -239,38 +240,4 @@ func (w *WorkItem) CompletedFormatted() string {
 		return strconv.FormatFloat(100*p, 'f', 1, 64) + "%"
 	}
 	return ""
-}
-
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-type Progress struct {
-	lock     sync.RWMutex
-	Duration time.Duration
-	progress ffmpeg.Progress
-}
-
-func (p *Progress) Update(progress ffmpeg.Progress) {
-	p.lock.Lock()
-	defer p.lock.Unlock()
-	p.progress.Converted = progress.Converted
-	// if speed is zero, we won't be able to calculate the remaining time. in this case, we don't update and the
-	// remaining time will be calculated using the last  reported speed.
-	if progress.Speed != 0 {
-		p.progress.Speed = progress.Speed
-	}
-}
-
-func (p *Progress) Completed() float64 {
-	p.lock.RLock()
-	defer p.lock.RUnlock()
-	return float64(p.progress.Converted) / float64(p.Duration)
-}
-
-func (p *Progress) Remaining() time.Duration {
-	p.lock.RLock()
-	defer p.lock.RUnlock()
-	if p.progress.Speed == 0 {
-		return -1
-	}
-	return time.Duration(float64(p.Duration-p.progress.Converted) / p.progress.Speed)
 }

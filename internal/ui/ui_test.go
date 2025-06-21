@@ -1,18 +1,19 @@
 package ui
 
 import (
+	"testing"
+
 	"github.com/clambin/videoConvertor/internal/configuration"
-	"github.com/clambin/videoConvertor/internal/worklist"
+	"github.com/clambin/videoConvertor/internal/pipeline"
 	"github.com/gdamore/tcell/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"testing"
 )
 
 func TestUI(t *testing.T) {
-	var list worklist.WorkList
+	var list pipeline.Queue
 	list.Add("foo")
-	list.List()[0].SetStatus(worklist.Skipped, nil)
+	list.List()[0].SetStatus(pipeline.Skipped, nil)
 
 	cfg := configuration.Configuration{Input: "/foo", ProfileName: "foo"}
 	ui := New(&list, cfg)
@@ -31,35 +32,35 @@ func TestUI(t *testing.T) {
 	assert.Equal(t, wantStatusText, ui.header.statusPane.GetText(true))
 
 	// default view: table is unfiltered
-	assert.Equal(t, 2, ui.workListViewer.Table.GetRowCount())
-	assert.Equal(t, "foo", ui.workListViewer.Table.GetCell(1, 0).Text)
+	assert.Equal(t, 2, ui.queueViewer.GetRowCount())
+	assert.Equal(t, "foo", ui.queueViewer.GetCell(1, 0).Text)
 
 	// validate that filters work
-	assert.Nil(t, ui.workListViewer.handleInput(tcell.NewEventKey(tcell.KeyRune, 's', tcell.ModNone)))
+	assert.Nil(t, ui.queueViewer.handleInput(tcell.NewEventKey(tcell.KeyRune, 's', tcell.ModNone)))
 	ui.refresh()
-	assert.Equal(t, 1, ui.workListViewer.Table.GetRowCount())
-	assert.Nil(t, ui.workListViewer.handleInput(tcell.NewEventKey(tcell.KeyRune, 's', tcell.ModNone)))
+	assert.Equal(t, 1, ui.queueViewer.GetRowCount())
+	assert.Nil(t, ui.queueViewer.handleInput(tcell.NewEventKey(tcell.KeyRune, 's', tcell.ModNone)))
 	ui.refresh()
-	assert.Equal(t, 2, ui.workListViewer.Table.GetRowCount())
-	assert.NotNil(t, ui.workListViewer.handleInput(tcell.NewEventKey(tcell.KeyRune, 's', tcell.ModCtrl)))
-	assert.Equal(t, 2, ui.workListViewer.Table.GetRowCount())
+	assert.Equal(t, 2, ui.queueViewer.GetRowCount())
+	assert.NotNil(t, ui.queueViewer.handleInput(tcell.NewEventKey(tcell.KeyRune, 's', tcell.ModCtrl)))
+	assert.Equal(t, 2, ui.queueViewer.GetRowCount())
 
 	// verify switching between different pages
-	front, _ := ui.GetFrontPage()
+	front, _ := ui.header.shortcutsView.GetFrontPage()
 	assert.Equal(t, "worklist", front)
 	assert.Nil(t, ui.handleInput(tcell.NewEventKey(tcell.KeyRune, 'l', tcell.ModNone)))
 	ui.refresh()
-	front, _ = ui.GetFrontPage()
+	front, _ = ui.header.shortcutsView.GetFrontPage()
 	assert.Equal(t, "logs", front)
 	assert.Nil(t, ui.handleInput(tcell.NewEventKey(tcell.KeyRune, 'l', tcell.ModNone)))
 	ui.refresh()
-	front, _ = ui.GetFrontPage()
+	front, _ = ui.header.shortcutsView.GetFrontPage()
 	assert.Equal(t, "worklist", front)
 
 	// Request a file to be converted
-	ui.Select(1, 0)
-	list.List()[0].SetStatus(worklist.Inspected, nil)
-	assert.Nil(t, ui.workListViewer.handleInput(tcell.NewEventKey(tcell.KeyEnter, rune(tcell.KeyEnter), tcell.ModNone)))
+	ui.queueViewer.Select(1, 0)
+	list.List()[0].SetStatus(pipeline.Inspected, nil)
+	assert.Nil(t, ui.queueViewer.handleInput(tcell.NewEventKey(tcell.KeyEnter, rune(tcell.KeyEnter), tcell.ModNone)))
 	item := list.NextToConvert()
 	require.NotNil(t, item)
 	assert.Equal(t, "foo", item.Source)

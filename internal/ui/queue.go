@@ -9,7 +9,7 @@ import (
 	"sync/atomic"
 
 	"codeberg.org/clambin/go-common/set"
-	"github.com/clambin/videoConvertor/internal/worklist"
+	"github.com/clambin/videoConvertor/internal/pipeline"
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 )
@@ -28,48 +28,48 @@ var workListShortCuts = shortcutsPage{
 	},
 }
 
-type workListViewer struct {
+type queueViewer struct {
 	*Table
-	list *worklist.WorkList
+	queue *pipeline.Queue
 	DataSource
 }
 
-func newWorkListViewer(list *worklist.WorkList) *workListViewer {
+func newQueueViewer(list *pipeline.Queue) *queueViewer {
 	dataSource := &workItems{
 		list:    list,
-		filters: filters{statuses: set.New[worklist.WorkStatus]()},
+		filters: filters{statuses: set.New[pipeline.WorkStatus]()},
 	}
-	v := workListViewer{
+	v := queueViewer{
 		Table:      NewTable(dataSource),
-		list:       list,
+		queue:      list,
 		DataSource: dataSource,
 	}
-	v.Table.SetInputCapture(v.handleInput)
+	v.SetInputCapture(v.handleInput)
 	return &v
 }
 
-func (v *workListViewer) refresh() {
+func (v *queueViewer) refresh() {
 	v.Table.Update()
 }
 
-func (v *workListViewer) handleInput(event *tcell.EventKey) *tcell.EventKey {
-	if v.DataSource.HandleInput(event) == nil {
+func (v *queueViewer) handleInput(event *tcell.EventKey) *tcell.EventKey {
+	if v.HandleInput(event) == nil {
 		return nil
 	}
 	switch event.Key() {
 	case tcell.KeyRune:
 		switch event.Rune() {
 		case 'p':
-			v.list.ToggleActive()
+			v.queue.ToggleActive()
 			return nil
 		default:
 			return event
 		}
 	case tcell.KeyEnter:
-		row, _ := v.Table.GetSelection()
-		item := v.Table.GetCell(row, 0).GetReference().(*worklist.WorkItem)
-		if status, _ := item.Status(); status == worklist.Inspected || status == worklist.Failed {
-			v.list.Queue(item)
+		row, _ := v.GetSelection()
+		item := v.GetCell(row, 0).GetReference().(*pipeline.WorkItem)
+		if status, _ := item.Status(); status == pipeline.Inspected || status == pipeline.Failed {
+			v.queue.Queue(item)
 		}
 		return nil
 	default:
@@ -80,12 +80,12 @@ func (v *workListViewer) handleInput(event *tcell.EventKey) *tcell.EventKey {
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 type filters struct {
-	statuses set.Set[worklist.WorkStatus]
+	statuses set.Set[pipeline.WorkStatus]
 	changed  bool
 	lock     sync.RWMutex
 }
 
-func (f *filters) toggle(statuses ...worklist.WorkStatus) {
+func (f *filters) toggle(statuses ...pipeline.WorkStatus) {
 	f.lock.Lock()
 	defer f.lock.Unlock()
 	for _, status := range statuses {
@@ -98,13 +98,13 @@ func (f *filters) toggle(statuses ...worklist.WorkStatus) {
 	}
 }
 
-func (f *filters) on(status worklist.WorkStatus) bool {
+func (f *filters) on(status pipeline.WorkStatus) bool {
 	f.lock.RLock()
 	defer f.lock.RUnlock()
 	return f.statuses.Contains(status)
 }
 
-func (f *filters) list() []worklist.WorkStatus {
+func (f *filters) list() []pipeline.WorkStatus {
 	f.lock.RLock()
 	defer f.lock.RUnlock()
 	return f.statuses.ListOrdered()
@@ -133,7 +133,7 @@ func (f *filters) updated() bool {
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-func colorStatus(status worklist.WorkStatus) tcell.Color {
+func colorStatus(status pipeline.WorkStatus) tcell.Color {
 	if statusColor, ok := tableColorStatus[status]; ok {
 		return statusColor
 	}
@@ -145,8 +145,8 @@ func colorStatus(status worklist.WorkStatus) tcell.Color {
 var _ DataSource = &workItems{}
 
 type workItems struct {
-	list *worklist.WorkList
-	filters
+	list     *pipeline.Queue
+	filters  filters
 	fullName atomic.Bool
 }
 
@@ -173,7 +173,7 @@ func (w *workItems) Update() Update {
 			update.Rows = append(update.Rows, row)
 		}
 	}
-	// maybe rows were added after get list.Size()?
+	// maybe rows were added after get queue.Size()?
 	size = max(size, len(update.Rows))
 	update.Title = w.title(size, len(update.Rows))
 
@@ -187,7 +187,7 @@ func padString(s string, width int) string {
 	return s
 }
 
-func (w *workItems) buildRow(item *worklist.WorkItem) []*tview.TableCell {
+func (w *workItems) buildRow(item *pipeline.WorkItem) []*tview.TableCell {
 	status, err := item.Status()
 	if w.filters.on(status) {
 		return nil
@@ -231,13 +231,13 @@ func (w *workItems) HandleInput(event *tcell.EventKey) *tcell.EventKey {
 	}
 	switch event.Rune() {
 	case 's':
-		w.filters.toggle(worklist.Skipped)
+		w.filters.toggle(pipeline.Skipped)
 		return nil
 	case 'c':
-		w.filters.toggle(worklist.Converted)
+		w.filters.toggle(pipeline.Converted)
 		return nil
 	case 'r':
-		w.filters.toggle(worklist.Rejected)
+		w.filters.toggle(pipeline.Rejected)
 		return nil
 	case 'f':
 		w.fullName.Store(!w.fullName.Load())

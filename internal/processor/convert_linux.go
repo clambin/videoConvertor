@@ -1,7 +1,7 @@
-package ffmpeg
+package processor
 
 import (
-	"github.com/clambin/videoConvertor/internal/ffmpeg/command"
+	"github.com/clambin/videoConvertor/ffmpeg"
 )
 
 // videoCodecs translates generic codec names into the OS-specific codec names
@@ -10,4 +10,4 @@ var videoCodecs = map[string]string{
 }
 
 // inputArguments are added before the input chain.
-var inputArguments = command.Args{}
+var inputArguments = ffmpeg.Args{}

@@ -1,15 +1,13 @@
-package converter
+package pipeline
 
 import (
 	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
-
-	"github.com/clambin/videoConvertor/internal/worklist"
 )
 
-func buildTargetFilename(item *worklist.WorkItem, directory, codec, extension string) string {
+func buildTargetFilename(item *WorkItem, directory, codec, extension string) string {
 	if directory == "" {
 		directory = filepath.Dir(item.Source)
 	}

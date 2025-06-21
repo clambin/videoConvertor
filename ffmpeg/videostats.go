@@ -79,11 +79,11 @@ func (s VideoStats) String() string {
 	}
 	output := make([]string, 1, 3)
 	output[0] = s.VideoCodec
-	if height := s.Height; height > 0 {
-		output = append(output, strconv.Itoa(height))
+	if s.Height > 0 {
+		output = append(output, strconv.Itoa(s.Height))
 	}
-	if bitRate := s.BitRate; bitRate > 0 {
-		output = append(output, Bits(bitRate).Format(2))
+	if s.BitRate > 0 {
+		output = append(output, Bits(s.BitRate).Format(2))
 	}
 	return strings.Join(output, "/")
 }

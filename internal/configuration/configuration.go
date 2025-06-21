@@ -3,44 +3,40 @@ package configuration
 import (
 	"flag"
 	"fmt"
+	"os"
+
+	"codeberg.org/clambin/go-common/flagger"
 	"github.com/clambin/videoConvertor/internal/profile"
 )
 
-var (
-	debug        = flag.Bool("debug", false, "switch on debug logging")
-	input        = flag.String("input", "/media", "input directory")
-	videoProfile = flag.String("profile", "hevc-max", "conversion profile")
-	active       = flag.Bool("active", false, "start convertor in active mode")
-	remove       = flag.Bool("remove", false, "remove source files after successful conversion")
-	overwrite    = flag.Bool("overwrite", false, "overwrite existing files")
-)
-
 type Configuration struct {
-	Input                string
-	ProfileName          string
-	Profile              profile.Profile
-	Debug                bool
-	Active               bool
-	RemoveSource         bool
-	OverwriteNewerTarget bool
+	flagger.Log
+	Input       string          `flagger.usage:"input directory"`
+	ProfileName string          `flagger.name:"profile" flagger.usage:"conversion profile"`
+	Profile     profile.Profile `flagger.skip:"true"`
+	Active      bool            `flagger.usage:"start processor in active mode"`
+	Remove      bool            `flagger.usage:"remove source files after successful conversion"`
+	Overwrite   bool            `flagger.usage:"overwrite existing files"`
 }
 
 func GetConfiguration() (Configuration, error) {
-	flag.Parse()
+	return getConfigurationWithFlagSet(flag.CommandLine, os.Args[1:]...)
+}
 
-	configuration := Configuration{
-		Input:                *input,
-		ProfileName:          *videoProfile,
-		Debug:                *debug,
-		Active:               *active,
-		RemoveSource:         *remove,
-		OverwriteNewerTarget: *overwrite,
+func getConfigurationWithFlagSet(f *flag.FlagSet, args ...string) (Configuration, error) {
+	cfg := Configuration{
+		Input:       "/media",
+		ProfileName: "hevc-max",
+	}
+	flagger.SetFlags(f, &cfg)
+	if err := f.Parse(args); err != nil {
+		return Configuration{}, err
 	}
 
 	var err error
-	if configuration.Profile, err = profile.GetProfile(configuration.ProfileName); err != nil {
-		return Configuration{}, fmt.Errorf("invalid profile %q: %w", configuration.ProfileName, err)
+	if cfg.Profile, err = profile.GetProfile(cfg.ProfileName); err != nil {
+		return Configuration{}, fmt.Errorf("invalid profile %q: %w", cfg.ProfileName, err)
 	}
 
-	return configuration, nil
+	return cfg, nil
 }

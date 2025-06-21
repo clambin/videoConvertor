@@ -1,4 +1,4 @@
-package converter
+package pipeline
 
 import (
 	"context"
@@ -9,10 +9,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/clambin/videoConvertor/ffmpeg"
 	"github.com/clambin/videoConvertor/internal/configuration"
-	"github.com/clambin/videoConvertor/internal/ffmpeg"
+	"github.com/clambin/videoConvertor/internal/processor"
 	"github.com/clambin/videoConvertor/internal/profile"
-	"github.com/clambin/videoConvertor/internal/worklist"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -27,59 +27,54 @@ func TestConverter_convert(t *testing.T) {
 		profile            string
 		ffmpegErr          error
 		fileCheckerResults fileCheckerResults
-		want               worklist.WorkStatus
+		want               WorkStatus
 		wantErr            bool
 	}{
 		{
 			name:      "video conversion failed",
 			profile:   "hevc-low",
 			ffmpegErr: errors.New("failed"),
-			want:      worklist.Failed,
+			want:      Failed,
 			wantErr:   true,
 		},
 		{
 			name:    "video converts successfully",
 			profile: "hevc-low",
-			want:    worklist.Converted,
+			want:    Converted,
 			wantErr: false,
 		},
 	}
 
 	for _, tt := range testCases {
 		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			var l worklist.WorkList
-			l.SetActive(true)
-
+			ff := fakeCodec{err: tt.ffmpegErr}
+			var q Queue
+			q.SetActive(true)
 			var cfg configuration.Configuration
 			cfg.Profile, _ = profile.GetProfile(tt.profile)
+			l := slog.New(slog.DiscardHandler)
 
-			ff := fakeFFMPEG{err: tt.ffmpegErr}
-			c := New(&ff, &l, cfg, slog.Default())
-			c.fileChecker = fakeFsChecker{ok: tt.fileCheckerResults.ok, err: tt.fileCheckerResults.err}
+			go convertWithFileChecker(t.Context(), &ff, &q, fakeFsChecker{ok: tt.fileCheckerResults.ok, err: tt.fileCheckerResults.err}, cfg, l)
 
-			go func() { c.Run(t.Context()) }()
-
-			i := l.Add("foo.mkv")
-			i.SetStatus(worklist.Inspected, nil)
+			i := q.Add("foo.mkv")
+			i.SetStatus(Inspected, nil)
 			i.AddSourceStats(ffmpeg.VideoStats{VideoCodec: "h264", BitRate: 4_000_000})
 
 			assert.Eventually(t, func() bool {
 				status, err := i.Status()
 				return status == tt.want && ((tt.wantErr && err != nil) || (!tt.wantErr && err == nil))
-			}, time.Second, time.Millisecond)
+			}, time.Second, convertInterval)
 		})
 	}
 }
 
-var _ FFMPEG = &fakeFFMPEG{}
+var _ Codec = &fakeCodec{}
 
-type fakeFFMPEG struct {
+type fakeCodec struct {
 	err error
 }
 
-func (f *fakeFFMPEG) Convert(_ context.Context, _ ffmpeg.Request) error {
+func (f *fakeCodec) Convert(_ context.Context, _ processor.Request) error {
 	return f.err
 }
 

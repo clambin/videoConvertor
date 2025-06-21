@@ -1,16 +1,19 @@
 package configuration
 
 import (
-	"github.com/stretchr/testify/assert"
+	"flag"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestGetConfiguration(t *testing.T) {
-	cfg, err := GetConfiguration()
+	f := flag.NewFlagSet("", flag.ContinueOnError)
+	cfg, err := getConfigurationWithFlagSet(f)
 	assert.NoError(t, err)
 	assert.Equal(t, "hevc-max", cfg.ProfileName)
 
-	*videoProfile = "invalid"
-	_, err = GetConfiguration()
+	f = flag.NewFlagSet("", flag.ContinueOnError)
+	_, err = getConfigurationWithFlagSet(f, "-profile", "invalid")
 	assert.Error(t, err)
 }

@@ -1,7 +1,7 @@
 package ui
 
 import (
-	"github.com/clambin/videoConvertor/internal/worklist"
+	"github.com/clambin/videoConvertor/internal/pipeline"
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 )
@@ -12,12 +12,12 @@ const (
 	shortcutColor = tcell.ColorBlue
 )
 
-var tableColorStatus = map[worklist.WorkStatus]tcell.Color{
-	worklist.Failed:     tcell.ColorRed,
-	worklist.Rejected:   tcell.ColorRed,
-	worklist.Converted:  tcell.ColorGreen,
-	worklist.Skipped:    tcell.ColorGreen,
-	worklist.Converting: tcell.ColorOrange,
+var tableColorStatus = map[pipeline.WorkStatus]tcell.Color{
+	pipeline.Failed:     tcell.ColorRed,
+	pipeline.Rejected:   tcell.ColorRed,
+	pipeline.Converted:  tcell.ColorGreen,
+	pipeline.Skipped:    tcell.ColorGreen,
+	pipeline.Converting: tcell.ColorOrange,
 }
 
 func init() {

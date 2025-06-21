@@ -2,30 +2,31 @@ package ui
 
 import (
 	"fmt"
+	"strings"
+
 	"github.com/clambin/videoConvertor/internal/configuration"
-	"github.com/clambin/videoConvertor/internal/worklist"
+	"github.com/clambin/videoConvertor/internal/pipeline"
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
-	"strings"
 )
 
 type header struct {
-	*configPane
-	*statusPane
-	*shortcutsView
+	configPane    *configPane
+	statusPane    *statusPane
+	shortcutsView *shortcutsView
 	*tview.Grid
 }
 
-func newHeader(list *worklist.WorkList, configuration configuration.Configuration) *header {
+func newHeader(list *pipeline.Queue, configuration configuration.Configuration) *header {
 	h := header{
 		Grid:          tview.NewGrid(),
 		configPane:    newConfigPane(configuration),
 		statusPane:    newStatusPane(list),
 		shortcutsView: newShortcutsView(),
 	}
-	h.Grid.AddItem(h.configPane.TextView, 0, 0, 1, 1, 0, 0, false)
-	h.Grid.AddItem(h.statusPane.TextView, 0, 1, 1, 1, 0, 0, false)
-	h.Grid.AddItem(h.shortcutsView.Pages, 0, 2, 1, 2, 0, 0, false)
+	h.AddItem(h.configPane.TextView, 0, 0, 1, 1, 0, 0, false)
+	h.AddItem(h.statusPane.TextView, 0, 1, 1, 1, 0, 0, false)
+	h.AddItem(h.shortcutsView.Pages, 0, 2, 1, 2, 0, 0, false)
 	return &h
 }
 
@@ -44,9 +45,9 @@ func newConfigPane(cfg configuration.Configuration) *configPane {
 	var content strings.Builder
 	content.WriteString(fmt.Sprintf(" [%s]Base directory:   [%s]%s\n", labelColor, tview.Styles.SecondaryTextColor, cfg.Input))
 	content.WriteString(fmt.Sprintf(" [%s]Profile:          [%s]%s\n", labelColor, tview.Styles.SecondaryTextColor, cfg.ProfileName))
-	content.WriteString(fmt.Sprintf(" [%s]Remove source:    [%s]%s\n", labelColor, tview.Styles.SecondaryTextColor, onOffString[cfg.RemoveSource]))
-	content.WriteString(fmt.Sprintf(" [%s]Overwrite target: [%s]%s\n", labelColor, tview.Styles.SecondaryTextColor, onOffString[cfg.OverwriteNewerTarget]))
-	p.TextView.SetText(content.String())
+	content.WriteString(fmt.Sprintf(" [%s]Remove source:    [%s]%s\n", labelColor, tview.Styles.SecondaryTextColor, onOffString[cfg.Remove]))
+	content.WriteString(fmt.Sprintf(" [%s]Overwrite target: [%s]%s\n", labelColor, tview.Styles.SecondaryTextColor, onOffString[cfg.Overwrite]))
+	p.SetText(content.String())
 	return &p
 }
 
@@ -64,10 +65,10 @@ var onOffColor = map[bool]tcell.Color{
 
 type statusPane struct {
 	*tview.TextView
-	list *worklist.WorkList
+	list *pipeline.Queue
 }
 
-func newStatusPane(list *worklist.WorkList) *statusPane {
+func newStatusPane(list *pipeline.Queue) *statusPane {
 	return &statusPane{
 		TextView: tview.NewTextView().SetDynamicColors(true),
 		list:     list,
@@ -77,6 +78,6 @@ func newStatusPane(list *worklist.WorkList) *statusPane {
 func (s *statusPane) refresh() {
 	converting := s.list.Active()
 	content := fmt.Sprintf(" [%s]Converting    : [%s]%s\n", labelColor, onOffColor[converting], onOffString[converting])
-	s.TextView.Clear()
-	s.TextView.SetText(content)
+	s.Clear()
+	s.SetText(content)
 }

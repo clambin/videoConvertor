@@ -1,10 +1,9 @@
-package scanner
+package pipeline
 
 import (
 	"log/slog"
 	"testing"
 
-	"github.com/clambin/videoConvertor/internal/worklist"
 	"github.com/psanford/memfs"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -17,8 +16,8 @@ func TestScanFS(t *testing.T) {
 	require.NoError(t, fs.WriteFile("foo/info.txt", []byte(""), 0644))
 	require.NoError(t, fs.MkdirAll("bar", 0000))
 
-	var list worklist.WorkList
-	ch := make(chan *worklist.WorkItem)
+	var list Queue
+	ch := make(chan *WorkItem)
 	errCh := make(chan error)
 	go func() { errCh <- ScanFS(t.Context(), fs, "/", &list, ch, slog.Default()) }()
 	item := <-ch

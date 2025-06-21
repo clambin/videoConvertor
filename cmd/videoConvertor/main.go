@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -13,12 +12,9 @@ import (
 	_ "net/http/pprof"
 
 	"github.com/clambin/videoConvertor/internal/configuration"
-	"github.com/clambin/videoConvertor/internal/converter"
-	"github.com/clambin/videoConvertor/internal/ffmpeg"
-	"github.com/clambin/videoConvertor/internal/preprocessor"
-	"github.com/clambin/videoConvertor/internal/scanner"
+	"github.com/clambin/videoConvertor/internal/pipeline"
+	"github.com/clambin/videoConvertor/internal/processor"
 	"github.com/clambin/videoConvertor/internal/ui"
-	"github.com/clambin/videoConvertor/internal/worklist"
 	"github.com/rivo/tview"
 	"golang.org/x/sync/errgroup"
 )
@@ -43,37 +39,28 @@ func Run(ctx context.Context, _ io.Writer) error {
 		return fmt.Errorf("invalid configuration: %w", err)
 	}
 
-	var list worklist.WorkList
+	var list pipeline.Queue
 	list.SetActive(cfg.Active)
 
 	u := ui.New(&list, cfg)
-
-	var opt slog.HandlerOptions
-	if cfg.Debug {
-		opt.Level = slog.LevelDebug
-	}
-	l := slog.New(slog.NewTextHandler(u.LogViewer, nil))
-
-	ff := ffmpeg.Processor{Logger: l.With("component", "ffmpeg")}
-	c := converter.New(&ff, &list, cfg, l.With("component", "converter"))
-
+	l := cfg.Logger(u.LogViewer, nil)
+	ff := processor.Processor{Logger: l.With("component", "ffmpeg")}
 	a := tview.NewApplication().SetRoot(u.Root, true)
+	itemCh := make(chan *pipeline.WorkItem)
 
 	subCtx, cancel := context.WithCancel(ctx)
-	itemCh := make(chan *worklist.WorkItem)
-
 	var g errgroup.Group
-	g.Go(func() error { return scanner.Scan(subCtx, cfg.Input, &list, itemCh, l.With("component", "scanner")) })
+	g.Go(func() error { return pipeline.Scan(subCtx, cfg.Input, &list, itemCh, l.With("component", "scanner")) })
 	const inspectorCount = 8
 	for range inspectorCount {
 		g.Go(func() error {
-			preprocessor.Run(subCtx, itemCh, &ff, cfg.Profile, l.With("component", "preprocessor"))
+			pipeline.Inspect(subCtx, itemCh, &ff, cfg.Profile, l.With("component", "inspector"))
 			return nil
 		})
 	}
 	const converterCount = 2
 	for range converterCount {
-		g.Go(func() error { c.Run(subCtx); return nil })
+		g.Go(func() error { pipeline.Convert(subCtx, &ff, &list, cfg, l.With("component", "processor")); return nil })
 	}
 
 	g.Go(func() error { u.Run(subCtx, a, 250*time.Millisecond); return nil })

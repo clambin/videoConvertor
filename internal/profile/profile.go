@@ -2,7 +2,8 @@ package profile
 
 import (
 	"fmt"
-	"github.com/clambin/videoConvertor/internal/ffmpeg"
+
+	"github.com/clambin/videoConvertor/ffmpeg"
 )
 
 type Quality int

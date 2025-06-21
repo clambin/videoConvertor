@@ -1,9 +1,10 @@
 package ui
 
 import (
+	"sync"
+
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
-	"sync"
 )
 
 type DataSource interface {
@@ -20,7 +21,7 @@ type Update struct {
 
 type Table struct {
 	*tview.Table
-	DataSource
+	DataSource DataSource
 }
 
 func NewTable(source DataSource) *Table {
@@ -38,33 +39,33 @@ func NewTable(source DataSource) *Table {
 }
 
 func (t *Table) Update() {
-	if t.Table.GetRowCount() == 0 {
+	if t.GetRowCount() == 0 {
 		for i, h := range t.DataSource.Header() {
-			t.Table.SetCell(0, i, h)
+			t.SetCell(0, i, h)
 		}
 	}
 	update := t.DataSource.Update()
-	t.Table.SetTitle(update.Title)
+	t.SetTitle(update.Title)
 	for i, row := range update.Rows {
 		for j, cell := range row {
-			putTableCell(t.Table.GetCell(i+1, j))
-			t.Table.SetCell(i+1, j, cell)
+			putTableCell(t.GetCell(i+1, j))
+			t.SetCell(i+1, j, cell)
 		}
 	}
 	t.trimRows(len(update.Rows) + 1)
 	if update.Reload {
-		t.Table.Select(1, 0)
-		t.Table.ScrollToBeginning()
+		t.Select(1, 0)
+		t.ScrollToBeginning()
 	}
 }
 
 func (t *Table) trimRows(rows int) {
-	for t.Table.GetRowCount() > rows {
-		r := t.Table.GetRowCount() - 1
-		for c := range t.Table.GetColumnCount() {
-			putTableCell(t.Table.GetCell(r, c))
+	for t.GetRowCount() > rows {
+		r := t.GetRowCount() - 1
+		for c := range t.GetColumnCount() {
+			putTableCell(t.GetCell(r, c))
 		}
-		t.Table.RemoveRow(r)
+		t.RemoveRow(r)
 	}
 }
 

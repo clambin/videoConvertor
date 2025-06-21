@@ -25,7 +25,7 @@ func newShortcutsView() *shortcutsView {
 }
 
 func (v *shortcutsView) addPage(name string, keys shortcutsPage, visible bool) {
-	v.Pages.AddPage(name, v.buildGrid(keys), true, visible)
+	v.AddPage(name, v.buildGrid(keys), true, visible)
 }
 
 func (v *shortcutsView) buildGrid(keys shortcutsPage) *tview.Grid {

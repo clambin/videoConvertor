@@ -145,7 +145,7 @@ func TestVideoStats_LogValue(t *testing.T) {
 }
 
 // Current:
-// BenchmarkParse-16         308307              3772 ns/op            1184 B/op         21 allocs/op
+// BenchmarkParse-10    	  688326	      1736 ns/op	    1176 B/op	      20 allocs/op
 func BenchmarkParse(b *testing.B) {
 	const input = `{
 		"streams": [
@@ -164,9 +164,8 @@ func BenchmarkParse(b *testing.B) {
 	}
 }
 
-// BenchmarkVideoStatsString-16             4474502               267.5 ns/op            80 B/op          5 allocs/op
 // Current:
-// BenchmarkVideoStatsString-16             4620211               258.9 ns/op            64 B/op          4 allocs/op
+// BenchmarkVideoStatsString-10    	10126482	       107.1 ns/op	      64 B/op	       4 allocs/op
 func BenchmarkVideoStatsString(b *testing.B) {
 	videoStats := VideoStats{
 		Width:         1920,

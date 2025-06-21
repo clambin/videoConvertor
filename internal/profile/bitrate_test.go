@@ -1,9 +1,10 @@
 package profile
 
 import (
-	"github.com/clambin/videoConvertor/internal/ffmpeg"
-	"github.com/stretchr/testify/assert"
 	"testing"
+
+	"github.com/clambin/videoConvertor/ffmpeg"
+	"github.com/stretchr/testify/assert"
 )
 
 func Test_bitRates_getBitrate(t *testing.T) {

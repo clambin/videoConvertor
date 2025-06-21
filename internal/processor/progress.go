@@ -1,52 +1,19 @@
-package ffmpeg
+package processor
 
 import (
 	"bufio"
 	"bytes"
-	"context"
 	"fmt"
 	"io"
 	"iter"
 	"log/slog"
 	"net"
 	"os"
-	"os/exec"
 	"path"
 	"path/filepath"
 	"strconv"
 	"time"
-
-	"github.com/clambin/videoConvertor/internal/ffmpeg/command"
 )
-
-// makeConvertCommand creates a exec.Command to run ffmeg with the required configuration.
-func makeConvertCommand(ctx context.Context, request Request, progressSocket string) (*exec.Cmd, error) {
-	codecName, ok := videoCodecs[request.TargetStats.VideoCodec]
-	if !ok {
-		return nil, fmt.Errorf("unsupported video codec: %s", request.TargetStats.VideoCodec)
-	}
-	profile := "main"
-	if request.TargetStats.BitsPerSample == 10 {
-		profile = "main10"
-	}
-
-	cmd := command.
-		Input(request.Source, inputArguments).
-		Output(request.Target, command.Args{
-			"c:v":       codecName,
-			"profile:v": profile,
-			"b:v":       strconv.Itoa(request.TargetStats.BitRate),
-			"c:a":       "copy",
-			"c:s":       "copy",
-			"f":         "matroska",
-		}).
-		NoStats().
-		LogLevel("error").
-		OverWriteTarget().
-		ProgressSocket(progressSocket)
-
-	return cmd.Build(ctx), nil
-}
 
 // makeProgressSocket creates and serves a unix socket for ffmpeg progress information.  Callers can use this to keep
 // track of the progress of the conversion.
@@ -92,7 +59,7 @@ type Progress struct {
 	Speed     float64
 }
 
-// progress reads the ffmpeg progress information to create a complete Progress record and yield it to the caller.
+// progress reads the ffmpeg progress information to create a complete Progress record and yields it to the caller.
 func progress(r io.Reader) iter.Seq2[Progress, error] {
 	var (
 		convertedMarker = []byte("out_time_ms=")
@@ -105,11 +72,12 @@ func progress(r io.Reader) iter.Seq2[Progress, error] {
 		var prog Progress
 		for s.Scan() {
 			line := s.Bytes()
-			if bytes.HasPrefix(line, convertedMarker) {
+			switch {
+			case bytes.HasPrefix(line, convertedMarker):
 				microSeconds, _ := strconv.Atoi(string(line[len(convertedMarker):]))
 				prog.Converted = time.Duration(microSeconds) * time.Microsecond
 				haveProgress = true
-			} else if bytes.HasPrefix(line, speedMarker) {
+			case bytes.HasPrefix(line, speedMarker):
 				line = bytes.TrimSuffix(line, []byte("x"))
 				prog.Speed, _ = strconv.ParseFloat(string(line[len(speedMarker):]), 64)
 				haveSpeed = true

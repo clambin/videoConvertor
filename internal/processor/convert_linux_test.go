@@ -1,6 +1,7 @@
-package ffmpeg
+package processor
 
 import (
+	"github.com/clambin/videoConvertor/ffmpeg"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -16,7 +17,7 @@ var makeConvertCommandTests = []struct {
 		request: Request{
 			Source:      "foo.mkv",
 			Target:      "foo.hevc.mkv",
-			TargetStats: VideoStats{VideoCodec: "hevc", BitRate: 4_000_000, BitsPerSample: 8},
+			TargetStats: ffmpeg.VideoStats{VideoCodec: "hevc", BitRate: 4_000_000, BitsPerSample: 8},
 		},
 		progressSocket: "socket",
 		want:           "-i foo.mkv -b:v 4000000 -c:a copy -c:s copy -c:v libx265 -f matroska -profile:v main foo.hevc.mkv -loglevel error -nostats -progress unix://socket -y",
@@ -27,7 +28,7 @@ var makeConvertCommandTests = []struct {
 		request: Request{
 			Source:      "foo.mkv",
 			Target:      "foo.hevc.mkv",
-			TargetStats: VideoStats{VideoCodec: "hevc", BitRate: 4_000_000, BitsPerSample: 10},
+			TargetStats: ffmpeg.VideoStats{VideoCodec: "hevc", BitRate: 4_000_000, BitsPerSample: 10},
 		},
 		progressSocket: "socket",
 		want:           "-i foo.mkv -b:v 4000000 -c:a copy -c:s copy -c:v libx265 -f matroska -profile:v main10 foo.hevc.mkv -loglevel error -nostats -progress unix://socket -y",
@@ -38,7 +39,7 @@ var makeConvertCommandTests = []struct {
 		request: Request{
 			Source:      "foo.mkv",
 			Target:      "foo.hevc.mkv",
-			TargetStats: VideoStats{VideoCodec: "hevc", BitRate: 4_000_000},
+			TargetStats: ffmpeg.VideoStats{VideoCodec: "hevc", BitRate: 4_000_000},
 		},
 		progressSocket: "socket",
 		want:           "-i foo.mkv -b:v 4000000 -c:a copy -c:s copy -c:v libx265 -f matroska -profile:v main foo.hevc.mkv -loglevel error -nostats -progress unix://socket -y",
@@ -49,7 +50,7 @@ var makeConvertCommandTests = []struct {
 		request: Request{
 			Source:      "foo.mkv",
 			Target:      "foo.hevc.mkv",
-			TargetStats: VideoStats{VideoCodec: "hevc", BitRate: 4_000_000, BitsPerSample: 8},
+			TargetStats: ffmpeg.VideoStats{VideoCodec: "hevc", BitRate: 4_000_000, BitsPerSample: 8},
 		},
 		want:    "-i foo.mkv -b:v 4000000 -c:a copy -c:s copy -c:v libx265 -f matroska -profile:v main foo.hevc.mkv -loglevel error -nostats -y",
 		wantErr: assert.NoError,
@@ -59,7 +60,7 @@ var makeConvertCommandTests = []struct {
 		request: Request{
 			Source:      "foo.mkv",
 			Target:      "foo.hevc.mkv",
-			TargetStats: VideoStats{VideoCodec: "h264", BitRate: 4_000_000, BitsPerSample: 8},
+			TargetStats: ffmpeg.VideoStats{VideoCodec: "h264", BitRate: 4_000_000, BitsPerSample: 8},
 		},
 		wantErr: assert.Error,
 	},

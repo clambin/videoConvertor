@@ -5,22 +5,22 @@ import (
 	"testing"
 
 	"codeberg.org/clambin/go-common/set"
+	"github.com/clambin/videoConvertor/internal/pipeline"
 	"github.com/clambin/videoConvertor/internal/profile"
-	"github.com/clambin/videoConvertor/internal/worklist"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func Test_workListViewer(t *testing.T) {
-	var list worklist.WorkList
-	list.Add("A").SetStatus(worklist.Skipped, profile.ErrSourceInTargetCodec)
-	list.Add("B").SetStatus(worklist.Rejected, profile.ErrSourceRejected{Reason: "bitrate too low"})
-	list.Add("C").SetStatus(worklist.Inspected, nil)
-	list.Add("D").SetStatus(worklist.Converted, nil)
+	var list pipeline.Queue
+	list.Add("A").SetStatus(pipeline.Skipped, profile.ErrSourceInTargetCodec)
+	list.Add("B").SetStatus(pipeline.Rejected, profile.ErrSourceRejected{Reason: "bitrate too low"})
+	list.Add("C").SetStatus(pipeline.Inspected, nil)
+	list.Add("D").SetStatus(pipeline.Converted, nil)
 
 	tests := []struct {
 		name      string
-		filters   []worklist.WorkStatus
+		filters   []pipeline.WorkStatus
 		wantCount int
 		wantFirst string
 	}{
@@ -31,32 +31,32 @@ func Test_workListViewer(t *testing.T) {
 		},
 		{
 			name:      "filter skipped",
-			filters:   []worklist.WorkStatus{worklist.Skipped},
+			filters:   []pipeline.WorkStatus{pipeline.Skipped},
 			wantCount: 1 + len(list.List()) - 1,
 			wantFirst: "B",
 		},
 		{
 			name:      "filter rejected",
-			filters:   []worklist.WorkStatus{worklist.Rejected},
+			filters:   []pipeline.WorkStatus{pipeline.Rejected},
 			wantCount: 1 + len(list.List()) - 1,
 			wantFirst: "A",
 		},
 		{
 			name:      "filter skipped & rejected",
-			filters:   []worklist.WorkStatus{worklist.Skipped, worklist.Rejected},
+			filters:   []pipeline.WorkStatus{pipeline.Skipped, pipeline.Rejected},
 			wantCount: 1 + len(list.List()) - 2,
 			wantFirst: "C",
 		},
 		{
 			name:      "all filter skipped & rejected",
-			filters:   []worklist.WorkStatus{worklist.Skipped, worklist.Rejected, worklist.Inspected, worklist.Converted},
+			filters:   []pipeline.WorkStatus{pipeline.Skipped, pipeline.Rejected, pipeline.Inspected, pipeline.Converted},
 			wantCount: 1,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			v := newWorkListViewer(&list)
-			v.DataSource.(*workItems).toggle(tt.filters...)
+			v := newQueueViewer(&list)
+			v.DataSource.(*workItems).filters.toggle(tt.filters...)
 			v.refresh()
 
 			assert.Equal(t, tt.wantCount, v.GetRowCount())
@@ -72,7 +72,7 @@ func Test_workListViewer(t *testing.T) {
 func Test_workItems_title(t *testing.T) {
 	tests := []struct {
 		name          string
-		filters       []worklist.WorkStatus
+		filters       []pipeline.WorkStatus
 		itemCount     int
 		rowCount      int
 		expectedTitle string
@@ -85,14 +85,14 @@ func Test_workItems_title(t *testing.T) {
 		},
 		{
 			name:          "With filter, multiple items",
-			filters:       []worklist.WorkStatus{worklist.Skipped},
+			filters:       []pipeline.WorkStatus{pipeline.Skipped},
 			itemCount:     10,
 			rowCount:      5,
 			expectedTitle: " files (filtered: skipped)[5/10] ",
 		},
 		{
 			name:          "With filter, single item",
-			filters:       []worklist.WorkStatus{worklist.Skipped, worklist.Rejected},
+			filters:       []pipeline.WorkStatus{pipeline.Skipped, pipeline.Rejected},
 			itemCount:     1,
 			rowCount:      1,
 			expectedTitle: " files (filtered: rejected, skipped)[1/1] ",
@@ -101,7 +101,7 @@ func Test_workItems_title(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ds := workItems{filters: filters{statuses: set.Set[worklist.WorkStatus]{}}}
+			ds := workItems{filters: filters{statuses: set.Set[pipeline.WorkStatus]{}}}
 			ds.filters.toggle(tt.filters...)
 			assert.Equal(t, tt.expectedTitle, ds.title(tt.itemCount, tt.rowCount))
 		})
@@ -111,7 +111,7 @@ func Test_workItems_title(t *testing.T) {
 // Current:
 // Benchmark_workItems_Update-16               2130            523429 ns/op          105566 B/op       1016 allocs/op
 func Benchmark_workItems_Update(b *testing.B) {
-	var list worklist.WorkList
+	var list pipeline.Queue
 	for i := range 1000 {
 		list.Add(strconv.Itoa(i))
 	}

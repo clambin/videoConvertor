@@ -1,7 +1,7 @@
 package ui
 
 import (
-	"github.com/clambin/videoConvertor/internal/pipeline"
+	"github.com/clambin/xcoder/internal/pipeline"
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 )
@@ -12,7 +12,7 @@ const (
 	shortcutColor = tcell.ColorBlue
 )
 
-var tableColorStatus = map[pipeline.WorkStatus]tcell.Color{
+var tableColorStatus = map[pipeline.Status]tcell.Color{
 	pipeline.Failed:     tcell.ColorRed,
 	pipeline.Rejected:   tcell.ColorRed,
 	pipeline.Converted:  tcell.ColorGreen,

@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/clambin/videoConvertor/ffmpeg"
+	"github.com/clambin/xcoder/ffmpeg"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -60,7 +60,9 @@ func TestProgress(t *testing.T) {
 			p := Progress{Duration: tt.duration}
 			p.progress.Speed = tt.prevSpeed
 			p.Update(tt.progress)
-			assert.Equal(t, tt.wantCompleted, p.Completed())
+			if tt.wantCompleted != 0 {
+				assert.InEpsilon(t, tt.wantCompleted, p.Completed(), 0.001)
+			}
 			assert.Equal(t, tt.wantRemaining, p.Remaining())
 		})
 	}

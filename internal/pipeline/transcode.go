@@ -4,31 +4,18 @@ import (
 	"context"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"strconv"
 	"time"
 
-	"github.com/clambin/videoConvertor/ffmpeg"
-	"github.com/clambin/videoConvertor/internal/configuration"
-	"github.com/clambin/videoConvertor/internal/transcoder"
+	"github.com/clambin/xcoder/ffmpeg"
 )
 
 const (
 	convertInterval = 100 * time.Millisecond
 )
 
-func Transcode(ctx context.Context, tc Transcoder, queue *Queue, cfg configuration.Configuration, logger *slog.Logger) {
-	transcodeWithFileChecker(ctx, tc, queue, fsFileChecker{}, cfg, logger)
-}
-
-type Transcoder interface {
-	Transcode(ctx context.Context, request transcoder.Request) error
-}
-
-type fileChecker interface {
-	TargetIsNewer(a, b string) (bool, error)
-}
-
-func transcodeWithFileChecker(ctx context.Context, tc Transcoder, queue *Queue, f fileChecker, cfg configuration.Configuration, logger *slog.Logger) {
+func Transcode(ctx context.Context, queue *Queue, cfg Configuration, logger *slog.Logger) {
 	ticker := time.NewTicker(convertInterval)
 	defer ticker.Stop()
 	for {
@@ -38,83 +25,55 @@ func transcodeWithFileChecker(ctx context.Context, tc Transcoder, queue *Queue, 
 		case <-ticker.C:
 		}
 		if item := queue.NextToConvert(); item != nil {
-			transcodeItem(ctx, item, tc, f, cfg, logger)
+			transcodeItem(ctx, item, cfg, logger.With("source", item.Source.Path))
 		}
 	}
 }
 
-func transcodeItem(ctx context.Context, item *WorkItem, tc Transcoder, f fileChecker, cfg configuration.Configuration, logger *slog.Logger) {
-	// Build target name
-	target := buildTargetFilename(item, "", cfg.Profile.TargetCodec, "mkv")
-	logger = logger.With("target", target)
-
-	// Has the file already been converted?
-	targetIsNewer, err := f.TargetIsNewer(item.Source, target)
+func transcodeItem(ctx context.Context, item *WorkItem, cfg Configuration, logger *slog.Logger) {
+	// add progress monitor to the transcoder
+	tmpDir, err := os.MkdirTemp("", "xcoder")
 	if err != nil {
-		logger.Error("failed to check if target is newer", "err", err)
-		item.SetStatus(Failed, err)
-	}
-	if targetIsNewer && !cfg.Overwrite {
-		logger.Info("already converted")
-		item.SetStatus(Skipped, err)
+		item.SetWorkStatus(WorkStatus{Status: Failed, Err: err})
 		return
 	}
-
-	// build the request
-	var lastDurationReported time.Duration
-	const reportInterval = 1 * time.Minute
-	totalDuration := item.SourceVideoStats().Duration
-	req := transcoder.Request{
-		Source:      item.Source,
-		Target:      target,
-		TargetStats: item.TargetVideoStats(),
-		ProgressCB: func(progress ffmpeg.Progress) {
-			item.Progress.Update(progress)
-			if progress.Converted-lastDurationReported > reportInterval {
-				logger.Info("conversion in progress",
-					"progress", progress.Converted,
-					"speed", progress.Speed,
-					"completed", strconv.FormatFloat(100*progress.Converted.Seconds()/totalDuration.Seconds(), 'f', 2, 64)+"%",
-				)
-				lastDurationReported = progress.Converted
-			}
-		},
-	}
-
-	logger.Info("target determined", "bitrate", req.TargetStats.BitRate)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
+	item.transcoder.Progress(progress(item, logger), filepath.Join(tmpDir, "transcoder.sock"))
 
 	// convert the file
 	logger.Debug("converting")
-	if err = tc.Transcode(ctx, req); err != nil {
-		_ = os.Remove(target)
+	if err = item.transcoder.Run(ctx, logger); err != nil {
+		_ = os.Remove(item.Target.Path)
 		logger.Warn("conversion failed", "err", err)
-		item.SetStatus(Failed, err)
+		item.SetWorkStatus(WorkStatus{Status: Failed, Err: err})
 		return
 	}
 
 	// clean up if needed
 	if cfg.Remove {
-		if err = os.Remove(item.Source); err != nil {
+		if err = os.Remove(item.Source.Path); err != nil {
 			logger.Warn("failed to remove source file", "err", err)
-			item.SetStatus(Failed, err)
+			item.SetWorkStatus(WorkStatus{Status: Failed, Err: err})
 		}
 	}
 	logger.Info("converted successfully")
-	item.SetStatus(Converted, nil)
+	item.SetWorkStatus(WorkStatus{Status: Converted})
 }
 
-type fsFileChecker struct{}
+func progress(item *WorkItem, logger *slog.Logger) func(ffmpeg.Progress) {
+	var lastDurationReported time.Duration
+	const reportInterval = time.Minute
+	item.Progress.Duration = item.Source.VideoStats.Duration
 
-// TargetIsNewer returns true if target exists and is more recent than target. If there was an error checking source, error contains the error.
-// If there was an error checking target, it returns (true, nil).
-func (c fsFileChecker) TargetIsNewer(source, target string) (bool, error) {
-	sStats, err := os.Stat(source)
-	if err != nil {
-		return false, err
+	return func(p ffmpeg.Progress) {
+		item.Progress.Update(p)
+		if p.Converted-lastDurationReported > reportInterval {
+			logger.Info("conversion in progress",
+				"progress", p.Converted,
+				"speed", p.Speed,
+				"completed", strconv.FormatFloat(100*p.Converted.Seconds()/item.Progress.Duration.Seconds(), 'f', 2, 64)+"%",
+			)
+			lastDurationReported = p.Converted
+		}
 	}
-	tStats, err := os.Stat(target)
-	if err != nil {
-		return false, nil
-	}
-	return tStats.ModTime().After(sStats.ModTime()), nil
 }

@@ -4,16 +4,17 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"os"
 	"testing"
 	"time"
 
-	"github.com/clambin/videoConvertor/ffmpeg"
-	"github.com/clambin/videoConvertor/internal/profile"
+	"github.com/clambin/xcoder/ffmpeg"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
-// TODO: use the tests from TestProfile_Inspect
 func TestInspect(t *testing.T) {
+	// TODO: use the tests from TestProfile_Inspect.
 	type args struct {
 		stats ffmpeg.VideoStats
 		err   error
@@ -44,7 +45,7 @@ func TestInspect(t *testing.T) {
 			name:    "video probe failed",
 			profile: "hevc-high",
 			args: args{
-				err: errors.New("failed"),
+				err: errors.New("failed"), //nolint:err113
 			},
 			want: Failed,
 		},
@@ -60,21 +61,20 @@ func TestInspect(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ff := fakeDecoder{
-				stats: tt.args.stats,
-				err:   tt.args.err,
-			}
-			p, _ := profile.GetProfile(tt.profile)
-
+			p, err := GetProfile(tt.profile)
+			require.NoError(t, err)
 			ch := make(chan *WorkItem)
-			l := slog.New(slog.DiscardHandler)
-			go func() { Inspect(t.Context(), ch, &ff, p, l) }()
+			l := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug}))
+			go func() {
+				Inspect(t.Context(), ch, Configuration{Profile: p}, func(s string) (ffmpeg.VideoStats, error) {
+					return tt.args.stats, tt.args.err
+				}, fakeFsChecker{}, l)
+			}()
 
-			item := WorkItem{Source: "foo.mkv"}
+			item := WorkItem{Source: MediaFile{Path: "foo.mkv"}}
 			ch <- &item
 			assert.Eventually(t, func() bool {
-				status, _ := item.Status()
-				return status == tt.want
+				return item.WorkStatus().Status == tt.want
 			}, time.Second, 10*time.Millisecond)
 			// t.Log(item.Status())
 		})

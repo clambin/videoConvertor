@@ -145,9 +145,9 @@ func TestVideoStats_LogValue(t *testing.T) {
 	}
 }
 
-// Current:
-// BenchmarkParse-10    	  623712	      1919 ns/op	    1664 B/op	      24 allocs/op
 func BenchmarkParse(b *testing.B) {
+	// Current:
+	// BenchmarkParse-10    	  623712	      1919 ns/op	    1664 B/op	      24 allocs/op
 	const input = `{
 		"streams": [
 	{ "codec_name": "hevc", "codec_type": "video", "bits_per_raw_sample": "10", "height": 1080, "width": 1920 },
@@ -165,9 +165,9 @@ func BenchmarkParse(b *testing.B) {
 	}
 }
 
-// Current:
-// BenchmarkVideoStatsString-10    	10126482	       107.1 ns/op	      64 B/op	       4 allocs/op
 func BenchmarkVideoStatsString(b *testing.B) {
+	// Current:
+	// BenchmarkVideoStatsString-10    	10126482	       107.1 ns/op	      64 B/op	       4 allocs/op
 	videoStats := VideoStats{
 		Width:         1920,
 		VideoCodec:    "hevc",

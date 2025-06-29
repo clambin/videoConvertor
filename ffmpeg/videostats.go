@@ -10,16 +10,18 @@ import (
 	"time"
 )
 
+//nolint:tagliatelle
 type VideoStats struct {
-	VideoCodec    string
-	Duration      time.Duration
-	BitRate       int
-	BitsPerSample int
-	Height        int
-	Width         int
+	VideoCodec    string        `json:"video_codec"`
+	Duration      time.Duration `json:"duration"`
+	BitRate       int           `json:"bit_rate"`
+	BitsPerSample int           `json:"bits_per_sample"`
+	Height        int           `json:"height"`
+	Width         int           `json:"width"`
 }
 
 func parseVideoStats(r io.Reader) (VideoStats, error) {
+	//nolint:tagliatelle
 	var stats struct {
 		Format struct {
 			Filename string `json:"filename"`
@@ -62,13 +64,13 @@ func parseVideoStats(r io.Reader) (VideoStats, error) {
 			case "10":
 				videoStats.BitsPerSample = 10
 			default:
-				return VideoStats{}, fmt.Errorf("invalid bits_per_raw_sample %q", stream.BitsPerRawSample)
+				return VideoStats{}, &InvalidMediaError{Reason: "invalid bits_per_raw_sample: " + stream.BitsPerRawSample}
 			}
 		}
 	}
 
 	if videoStats.VideoCodec == "" {
-		return VideoStats{}, fmt.Errorf("no video stream found")
+		return VideoStats{}, &InvalidMediaError{Reason: "no video stream found"}
 	}
 
 	return videoStats, nil
@@ -119,4 +121,12 @@ func (b Bits) Format(decimals int) string {
 		unit = "mb"
 	}
 	return strconv.FormatFloat(floatBits, 'f', decimals, 64) + " " + unit + "ps"
+}
+
+type InvalidMediaError struct {
+	Reason string
+}
+
+func (e InvalidMediaError) Error() string {
+	return e.Reason
 }

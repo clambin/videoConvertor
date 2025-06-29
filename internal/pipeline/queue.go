@@ -1,13 +1,15 @@
 package pipeline
 
 import (
+	"context"
 	"iter"
+	"log/slog"
 	"slices"
 	"strconv"
 	"sync"
 	"time"
 
-	"github.com/clambin/videoConvertor/ffmpeg"
+	"github.com/clambin/xcoder/ffmpeg"
 )
 
 type Queue struct {
@@ -20,7 +22,7 @@ type Queue struct {
 func (q *Queue) Add(filename string) *WorkItem {
 	q.lock.Lock()
 	defer q.lock.Unlock()
-	item := &WorkItem{Source: filename}
+	item := &WorkItem{Source: MediaFile{Path: filename}}
 	q.queue = append(q.queue, item)
 	return item
 }
@@ -36,30 +38,6 @@ func (q *Queue) NextToConvert() *WorkItem {
 	}
 	// return the next item ready for conversion
 	return q.checkout(Inspected, Converting)
-}
-
-func (q *Queue) dequeue() *WorkItem {
-	q.lock.Lock()
-	defer q.lock.Unlock()
-	var item *WorkItem
-	if len(q.waiting) > 0 {
-		item = q.waiting[0]
-		item.SetStatus(Converting, nil)
-		q.waiting = q.waiting[1:]
-	}
-	return item
-}
-
-func (q *Queue) checkout(current, next WorkStatus) *WorkItem {
-	q.lock.RLock()
-	defer q.lock.RUnlock()
-	for _, item := range q.queue {
-		if status, _ := item.Status(); status == current {
-			item.SetStatus(next, nil)
-			return item
-		}
-	}
-	return nil
 }
 
 // Queue adds an item ready to be converted. This item will be processed, regardless of whether the queue is active or not.
@@ -113,97 +91,76 @@ func (q *Queue) ToggleActive() {
 	q.active = !q.active
 }
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-type WorkStatus int
-
-const (
-	Waiting WorkStatus = iota
-	Inspecting
-	Skipped
-	Rejected
-	Inspected
-	Converting
-	Converted
-	Failed
-)
-
-var workStatusToString = map[WorkStatus]string{
-	Waiting:    "waiting",
-	Inspecting: "inspecting",
-	Skipped:    "skipped",
-	Rejected:   "rejected",
-	Inspected:  "inspected",
-	Converting: "converting",
-	Converted:  "converted",
-	Failed:     "failed",
+func (q *Queue) dequeue() *WorkItem {
+	q.lock.Lock()
+	defer q.lock.Unlock()
+	var item *WorkItem
+	if len(q.waiting) > 0 {
+		item = q.waiting[0]
+		item.SetWorkStatus(WorkStatus{Status: Converting})
+		q.waiting = q.waiting[1:]
+	}
+	return item
 }
 
-func (ws WorkStatus) String() string {
-	if label, ok := workStatusToString[ws]; ok {
-		return label
+func (q *Queue) checkout(current, next Status) *WorkItem {
+	q.lock.RLock()
+	defer q.lock.RUnlock()
+	for _, item := range q.queue {
+		if workStatus := item.WorkStatus(); workStatus.Status == current {
+			item.SetWorkStatus(WorkStatus{Status: next})
+			return item
+		}
 	}
-	return "unknown"
+	return nil
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 type WorkItem struct {
-	err         error
-	Source      string
-	sourceStats ffmpeg.VideoStats
-	targetStats ffmpeg.VideoStats
-	Progress    Progress
-	status      WorkStatus
-	lock        sync.RWMutex
+	transcoder transcoder
+	workStatus WorkStatus
+	Source     MediaFile
+	Target     MediaFile
+	Progress   Progress
+	lock       sync.RWMutex
 }
 
-func (w *WorkItem) Status() (WorkStatus, error) {
+type transcoder interface {
+	Progress(cb func(ffmpeg.Progress), progressSocketPath string) *ffmpeg.FFMPEG
+	Run(context.Context, *slog.Logger) error
+}
+
+type WorkStatus struct {
+	Err    error
+	Status Status
+}
+
+type MediaFile struct {
+	Path       string
+	VideoStats ffmpeg.VideoStats
+}
+
+func (w *WorkItem) WorkStatus() WorkStatus {
 	w.lock.RLock()
 	defer w.lock.RUnlock()
-	return w.status, w.err
+	return w.workStatus
 }
 
-func (w *WorkItem) SetStatus(status WorkStatus, err error) {
+func (w *WorkItem) SetWorkStatus(workStatus WorkStatus) {
 	w.lock.Lock()
 	defer w.lock.Unlock()
-	w.status = status
-	w.err = err
-}
-
-func (w *WorkItem) SourceVideoStats() ffmpeg.VideoStats {
-	w.lock.RLock()
-	defer w.lock.RUnlock()
-	return w.sourceStats
-}
-
-func (w *WorkItem) AddSourceStats(stats ffmpeg.VideoStats) {
-	w.lock.Lock()
-	defer w.lock.Unlock()
-	w.sourceStats = stats
-	w.Progress.Duration = stats.Duration
-}
-
-func (w *WorkItem) TargetVideoStats() ffmpeg.VideoStats {
-	w.lock.RLock()
-	defer w.lock.RUnlock()
-	return w.targetStats
-}
-
-func (w *WorkItem) AddTargetStats(stats ffmpeg.VideoStats) {
-	w.lock.Lock()
-	defer w.lock.Unlock()
-	w.targetStats = stats
+	w.workStatus = workStatus
 }
 
 func (w *WorkItem) RemainingFormatted() string {
 	w.lock.RLock()
 	defer w.lock.RUnlock()
-	if w.status != Converting {
+	if w.workStatus.Status != Converting {
 		return ""
 	}
 	var output string
-	if d := w.Progress.Remaining(); d >= 0 { // not sure why I added this check?
+	if d := w.Progress.Remaining(); d >= 0 {
 		output = formatDuration(d)
 	}
 	return output
@@ -233,11 +190,61 @@ func formatDuration(d time.Duration) string {
 func (w *WorkItem) CompletedFormatted() string {
 	w.lock.RLock()
 	defer w.lock.RUnlock()
-	if w.status != Converting {
+	if w.workStatus.Status != Converting {
 		return ""
 	}
 	if p := w.Progress.Completed(); p > 0 {
 		return strconv.FormatFloat(100*p, 'f', 1, 64) + "%"
 	}
 	return ""
+}
+
+func (w *WorkItem) SourceVideoStats() ffmpeg.VideoStats {
+	w.lock.RLock()
+	defer w.lock.RUnlock()
+	return w.Source.VideoStats
+}
+
+func (w *WorkItem) TargetVideoStats() ffmpeg.VideoStats {
+	w.lock.RLock()
+	defer w.lock.RUnlock()
+	return w.Target.VideoStats
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+type Status int
+
+const (
+	Waiting Status = iota
+	Inspecting
+	Skipped
+	Rejected
+	Inspected
+	Converting
+	Converted
+	Failed
+)
+
+func (s Status) String() string {
+	switch s {
+	case Waiting:
+		return "waiting"
+	case Inspecting:
+		return "inspecting"
+	case Skipped:
+		return "skipped"
+	case Rejected:
+		return "rejected"
+	case Inspected:
+		return "inspected"
+	case Converting:
+		return "converting"
+	case Converted:
+		return "converted"
+	case Failed:
+		return "failed"
+	default:
+		return "unknown"
+	}
 }

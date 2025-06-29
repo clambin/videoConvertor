@@ -5,22 +5,21 @@ import (
 	"testing"
 
 	"codeberg.org/clambin/go-common/set"
-	"github.com/clambin/videoConvertor/internal/pipeline"
-	"github.com/clambin/videoConvertor/internal/profile"
+	"github.com/clambin/xcoder/internal/pipeline"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func Test_workListViewer(t *testing.T) {
 	var list pipeline.Queue
-	list.Add("A").SetStatus(pipeline.Skipped, profile.NewErrSourceRejected(false, "source in target codec"))
-	list.Add("B").SetStatus(pipeline.Rejected, profile.NewErrSourceRejected(true, "bitrate too low"))
-	list.Add("C").SetStatus(pipeline.Inspected, nil)
-	list.Add("D").SetStatus(pipeline.Converted, nil)
+	list.Add("A").SetWorkStatus(pipeline.WorkStatus{Status: pipeline.Skipped, Err: &pipeline.SourceRejectedError{Reason: "source in target codec"}})
+	list.Add("B").SetWorkStatus(pipeline.WorkStatus{Status: pipeline.Rejected, Err: &pipeline.SourceSkippedError{Reason: "bitrate too low"}})
+	list.Add("C").SetWorkStatus(pipeline.WorkStatus{Status: pipeline.Inspected})
+	list.Add("D").SetWorkStatus(pipeline.WorkStatus{Status: pipeline.Converted})
 
 	tests := []struct {
 		name      string
-		filters   []pipeline.WorkStatus
+		filters   []pipeline.Status
 		wantCount int
 		wantFirst string
 	}{
@@ -31,32 +30,32 @@ func Test_workListViewer(t *testing.T) {
 		},
 		{
 			name:      "filter skipped",
-			filters:   []pipeline.WorkStatus{pipeline.Skipped},
+			filters:   []pipeline.Status{pipeline.Skipped},
 			wantCount: 1 + len(list.List()) - 1,
 			wantFirst: "B",
 		},
 		{
 			name:      "filter rejected",
-			filters:   []pipeline.WorkStatus{pipeline.Rejected},
+			filters:   []pipeline.Status{pipeline.Rejected},
 			wantCount: 1 + len(list.List()) - 1,
 			wantFirst: "A",
 		},
 		{
 			name:      "filter skipped & rejected",
-			filters:   []pipeline.WorkStatus{pipeline.Skipped, pipeline.Rejected},
+			filters:   []pipeline.Status{pipeline.Skipped, pipeline.Rejected},
 			wantCount: 1 + len(list.List()) - 2,
 			wantFirst: "C",
 		},
 		{
 			name:      "all filter skipped & rejected",
-			filters:   []pipeline.WorkStatus{pipeline.Skipped, pipeline.Rejected, pipeline.Inspected, pipeline.Converted},
+			filters:   []pipeline.Status{pipeline.Skipped, pipeline.Rejected, pipeline.Inspected, pipeline.Converted},
 			wantCount: 1,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			v := newQueueViewer(&list)
-			v.DataSource.(*workItems).filters.toggle(tt.filters...)
+			v.dataSource.(*workItems).filters.toggle(tt.filters...)
 			v.refresh()
 
 			assert.Equal(t, tt.wantCount, v.GetRowCount())
@@ -66,13 +65,12 @@ func Test_workListViewer(t *testing.T) {
 			}
 		})
 	}
-
 }
 
 func Test_workItems_title(t *testing.T) {
 	tests := []struct {
 		name          string
-		filters       []pipeline.WorkStatus
+		filters       []pipeline.Status
 		itemCount     int
 		rowCount      int
 		expectedTitle string
@@ -85,14 +83,14 @@ func Test_workItems_title(t *testing.T) {
 		},
 		{
 			name:          "With filter, multiple items",
-			filters:       []pipeline.WorkStatus{pipeline.Skipped},
+			filters:       []pipeline.Status{pipeline.Skipped},
 			itemCount:     10,
 			rowCount:      5,
 			expectedTitle: " files (filtered: skipped)[5/10] ",
 		},
 		{
 			name:          "With filter, single item",
-			filters:       []pipeline.WorkStatus{pipeline.Skipped, pipeline.Rejected},
+			filters:       []pipeline.Status{pipeline.Skipped, pipeline.Rejected},
 			itemCount:     1,
 			rowCount:      1,
 			expectedTitle: " files (filtered: rejected, skipped)[1/1] ",
@@ -101,16 +99,16 @@ func Test_workItems_title(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ds := workItems{filters: filters{statuses: set.Set[pipeline.WorkStatus]{}}}
+			ds := workItems{filters: filters{statuses: set.Set[pipeline.Status]{}}}
 			ds.filters.toggle(tt.filters...)
 			assert.Equal(t, tt.expectedTitle, ds.title(tt.itemCount, tt.rowCount))
 		})
 	}
 }
 
-// Current:
-// Benchmark_workItems_Update-16               2130            523429 ns/op          105566 B/op       1016 allocs/op
 func Benchmark_workItems_Update(b *testing.B) {
+	// Current:
+	// Benchmark_workItems_Update-16               2130            523429 ns/op          105566 B/op       1016 allocs/op
 	var list pipeline.Queue
 	for i := range 1000 {
 		list.Add(strconv.Itoa(i))

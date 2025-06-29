@@ -8,40 +8,15 @@ import (
 	"io"
 	"log/slog"
 	"net"
-	"os"
-	"path"
-	"path/filepath"
 	"strconv"
 	"time"
 )
 
-// makeProgressSocket creates and serves a unix socket for ffmpeg progress information.  Callers can use this to keep
-// track of the progress of the conversion.
-func makeProgressSocket() (net.Listener, string, error) {
-	tmpDir, err := os.MkdirTemp("", "ffmpeg-")
-	if err != nil {
-		return nil, "", err
-	}
-	sockFileName := path.Join(tmpDir, "ffmpeg.sock")
-	l, err := net.Listen("unix", sockFileName)
-	if err != nil {
-		return nil, "", fmt.Errorf("progress socket: listen: %w", err)
-	}
-	return l, sockFileName, nil
-}
-
 // serveProgressSocket reads the ffmpeg progress and calls the process callback function.
-func serveProgressSocket(ctx context.Context, l net.Listener, path string, progressCallback func(Progress), logger *slog.Logger) {
-	defer func() {
-		if err := os.RemoveAll(filepath.Dir(path)); err != nil {
-			logger.Error("failed to clean up status socket", "err", err)
-		}
-	}()
-
+func serveProgressSocket(ctx context.Context, l net.Listener, progressCallback func(Progress), logger *slog.Logger) error {
 	fd, err := l.Accept()
 	if err != nil {
-		logger.Error("failed to serve status socket", "err", err)
-		return
+		return fmt.Errorf("failed to serve status socket: %w", err)
 	}
 
 	defer func() { _ = fd.Close() }()
@@ -52,12 +27,12 @@ func serveProgressSocket(ctx context.Context, l net.Listener, path string, progr
 		case prog, ok := <-ch:
 			if !ok {
 				logger.Debug("progress socket closed")
-				return
+				return nil
 			}
 			progressCallback(prog)
 		case <-ctx.Done():
 			logger.Debug("context cancelled", "err", ctx.Err())
-			return
+			return nil
 		}
 	}
 }
@@ -67,7 +42,7 @@ type Progress struct {
 	Speed     float64
 }
 
-// progress reads the ffmpeg progress information and returns Progress records on a channel
+// progress reads the ffmpeg progress information and returns Progress records on a channel.
 func progress(r io.Reader, logger *slog.Logger) chan Progress {
 	var (
 		convertedMarker = []byte("out_time_ms=")

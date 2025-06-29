@@ -13,11 +13,11 @@ import (
 
 var videoExtensions = set.New(".mkv", ".mp4", ".avi", ".mov")
 
-func Scan(ctx context.Context, baseDir string, list *Queue, ch chan<- *WorkItem, logger *slog.Logger) error {
-	return ScanFS(ctx, os.DirFS(baseDir), baseDir, list, ch, logger)
+func Scan(ctx context.Context, baseDir string, queue *Queue, ch chan<- *WorkItem, logger *slog.Logger) error {
+	return ScanFS(ctx, os.DirFS(baseDir), baseDir, queue, ch, logger)
 }
 
-func ScanFS(ctx context.Context, fileSystem fs.FS, baseDir string, list *Queue, ch chan<- *WorkItem, logger *slog.Logger) error {
+func ScanFS(ctx context.Context, fileSystem fs.FS, baseDir string, queue *Queue, ch chan<- *WorkItem, logger *slog.Logger) error {
 	return fs.WalkDir(fileSystem, ".", func(path string, d fs.DirEntry, err error) error {
 		select {
 		case <-ctx.Done():
@@ -26,7 +26,7 @@ func ScanFS(ctx context.Context, fileSystem fs.FS, baseDir string, list *Queue, 
 		}
 		l := logger.With(slog.String("path", path))
 		if err != nil {
-			l.Warn("failed to scan path", "err", err, "path", path)
+			l.Warn("failed to scan path", "err", err)
 			return nil
 		}
 		if d.IsDir() {
@@ -40,7 +40,7 @@ func ScanFS(ctx context.Context, fileSystem fs.FS, baseDir string, list *Queue, 
 
 		path = filepath.Join(baseDir, path)
 		logger.Info("found video file", "path", path)
-		ch <- list.Add(path)
+		ch <- queue.Add(path)
 		return nil
 	})
 }

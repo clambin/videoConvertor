@@ -43,6 +43,7 @@ func (v *LogViewer) handleInput(event *tcell.EventKey) *tcell.EventKey {
 				v.ToggleWrap()
 				return nil
 			}
+		default:
 		}
 	default:
 		return event

@@ -1,9 +1,10 @@
 package ui
 
 import (
+	"testing"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"testing"
 )
 
 func Test_shortcuts(t *testing.T) {

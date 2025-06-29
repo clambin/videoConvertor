@@ -2,34 +2,11 @@ package ffmpeg
 
 import (
 	"log/slog"
-	"net"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
-
-func TestFFMPEG_ProgressSocket(t *testing.T) {
-	done := make(chan struct{})
-	listener, sock, err := makeProgressSocket()
-	require.NoError(t, err)
-
-	handler := func(p Progress) {
-		t.Helper()
-		assert.Equal(t, time.Second, p.Converted)
-		assert.Equal(t, 1.0, p.Speed)
-		done <- struct{}{}
-	}
-	go serveProgressSocket(t.Context(), listener, sock, handler, slog.New(slog.DiscardHandler))
-
-	fd, err := net.Dial("unix", sock)
-	require.NoError(t, err)
-	_, err = fd.Write([]byte("out_time_ms=1000000\nspeed=1.0x\nprogress=end\n"))
-	require.NoError(t, err)
-	<-done
-}
 
 func Test_progress(t *testing.T) {
 	tests := []struct {
@@ -76,13 +53,9 @@ func Test_progress(t *testing.T) {
 	}
 }
 
-// Current:
-// Benchmark_progress-16             661       1798077 ns/op        4263 B/op          3 allocs/op
-//
-// New (arm64):
-// Benchmark_progress-10    	     830	   1421598 ns/op	    4302 B/op	       8 allocs/op
-// Benchmark_progress-10    	     571	   2112925 ns/op	    4398 B/op	       7 allocs/op
 func Benchmark_progress(b *testing.B) {
+	// Current:
+	// Benchmark_progress-10    	     571	   2112925 ns/op	    4398 B/op	       7 allocs/op
 	var input strings.Builder
 	for range 1000 {
 		for range 100 {

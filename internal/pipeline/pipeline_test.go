@@ -1,4 +1,4 @@
-package pipeline
+package pipeline_test
 
 import (
 	"context"
@@ -8,23 +8,22 @@ import (
 	"testing"
 	"time"
 
-	"github.com/clambin/videoConvertor/internal/configuration"
-	"github.com/clambin/videoConvertor/internal/profile"
+	"github.com/clambin/xcoder/internal/pipeline"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestRun(t *testing.T) {
-	p, _ := profile.GetProfile("hevc-high")
-	cfg := configuration.Configuration{
+	p, _ := pipeline.GetProfile("hevc-high")
+	cfg := pipeline.Configuration{
 		Profile: p,
 		Input:   t.TempDir(),
 	}
-	var queue Queue
+	var queue pipeline.Queue
 	l := slog.New(slog.DiscardHandler)
 	var errCh = make(chan error)
 	ctx, cancel := context.WithCancel(t.Context())
-	go func() { errCh <- Run(ctx, cfg, &queue, l) }()
+	go func() { errCh <- pipeline.Run(ctx, cfg, &queue, l) }()
 
 	require.NoError(t, os.WriteFile(filepath.Join(cfg.Input, "video.mkv"), []byte{}, 0644))
 
@@ -33,8 +32,7 @@ func TestRun(t *testing.T) {
 		if len(queue.List()) != 1 {
 			return false
 		}
-		status, _ := items[0].Status()
-		return status == Failed
+		return items[0].WorkStatus().Status == pipeline.Failed
 	}, time.Second, time.Millisecond)
 
 	cancel()

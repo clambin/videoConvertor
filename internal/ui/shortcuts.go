@@ -2,8 +2,9 @@ package ui
 
 import (
 	"fmt"
-	"github.com/rivo/tview"
 	"strings"
+
+	"github.com/rivo/tview"
 )
 
 type shortcut struct {

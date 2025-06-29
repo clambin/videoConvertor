@@ -4,8 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/clambin/videoConvertor/internal/configuration"
-	"github.com/clambin/videoConvertor/internal/pipeline"
+	"github.com/clambin/xcoder/internal/pipeline"
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 )
@@ -19,10 +18,10 @@ type UI struct {
 }
 
 type Application interface {
-	QueueUpdateDraw(func()) *tview.Application
+	QueueUpdateDraw(f func()) *tview.Application
 }
 
-func New(list *pipeline.Queue, cfg configuration.Configuration) *UI {
+func New(list *pipeline.Queue, cfg pipeline.Configuration) *UI {
 	h := newHeader(list, cfg)
 	b := tview.NewPages()
 

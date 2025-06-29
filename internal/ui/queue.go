@@ -9,7 +9,7 @@ import (
 	"sync/atomic"
 
 	"codeberg.org/clambin/go-common/set"
-	"github.com/clambin/videoConvertor/internal/pipeline"
+	"github.com/clambin/xcoder/internal/pipeline"
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 )
@@ -31,18 +31,18 @@ var workListShortCuts = shortcutsPage{
 type queueViewer struct {
 	*Table
 	queue *pipeline.Queue
-	DataSource
+	dataSource
 }
 
 func newQueueViewer(list *pipeline.Queue) *queueViewer {
-	dataSource := &workItems{
+	source := &workItems{
 		list:    list,
-		filters: filters{statuses: set.New[pipeline.WorkStatus]()},
+		filters: filters{statuses: set.New[pipeline.Status]()},
 	}
 	v := queueViewer{
-		Table:      NewTable(dataSource),
+		Table:      NewTable(source),
 		queue:      list,
-		DataSource: dataSource,
+		dataSource: source,
 	}
 	v.SetInputCapture(v.handleInput)
 	return &v
@@ -68,7 +68,7 @@ func (v *queueViewer) handleInput(event *tcell.EventKey) *tcell.EventKey {
 	case tcell.KeyEnter:
 		row, _ := v.GetSelection()
 		item := v.GetCell(row, 0).GetReference().(*pipeline.WorkItem)
-		if status, _ := item.Status(); status == pipeline.Inspected || status == pipeline.Failed {
+		if status := item.WorkStatus().Status; status == pipeline.Inspected || status == pipeline.Failed {
 			v.queue.Queue(item)
 		}
 		return nil
@@ -80,12 +80,12 @@ func (v *queueViewer) handleInput(event *tcell.EventKey) *tcell.EventKey {
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 type filters struct {
-	statuses set.Set[pipeline.WorkStatus]
+	statuses set.Set[pipeline.Status]
 	changed  bool
 	lock     sync.RWMutex
 }
 
-func (f *filters) toggle(statuses ...pipeline.WorkStatus) {
+func (f *filters) toggle(statuses ...pipeline.Status) {
 	f.lock.Lock()
 	defer f.lock.Unlock()
 	for _, status := range statuses {
@@ -98,19 +98,19 @@ func (f *filters) toggle(statuses ...pipeline.WorkStatus) {
 	}
 }
 
-func (f *filters) on(status pipeline.WorkStatus) bool {
+func (f *filters) on(status pipeline.Status) bool {
 	f.lock.RLock()
 	defer f.lock.RUnlock()
 	return f.statuses.Contains(status)
 }
 
-func (f *filters) list() []pipeline.WorkStatus {
+func (f *filters) list() []pipeline.Status {
 	f.lock.RLock()
 	defer f.lock.RUnlock()
 	return f.statuses.ListOrdered()
 }
 
-func (f *filters) Format() string {
+func (f *filters) format() string {
 	filtered := f.list()
 	if len(filtered) == 0 {
 		return ""
@@ -133,7 +133,7 @@ func (f *filters) updated() bool {
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-func colorStatus(status pipeline.WorkStatus) tcell.Color {
+func colorStatus(status pipeline.Status) tcell.Color {
 	if statusColor, ok := tableColorStatus[status]; ok {
 		return statusColor
 	}
@@ -142,7 +142,7 @@ func colorStatus(status pipeline.WorkStatus) tcell.Color {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-var _ DataSource = &workItems{}
+var _ dataSource = &workItems{}
 
 type workItems struct {
 	list     *pipeline.Queue
@@ -187,41 +187,6 @@ func padString(s string, width int) string {
 	return s
 }
 
-func (w *workItems) buildRow(item *pipeline.WorkItem) []*tview.TableCell {
-	status, err := item.Status()
-	if w.filters.on(status) {
-		return nil
-	}
-	source := item.Source
-	if !w.fullName.Load() {
-		source = filepath.Base(source)
-	}
-	var errString string
-	if err != nil {
-		errString = err.Error()
-	}
-	return []*tview.TableCell{
-		getTableCell(source, tview.Styles.PrimaryTextColor, tview.Styles.PrimitiveBackgroundColor, tview.AlignLeft).SetReference(item),
-		getTableCell(item.SourceVideoStats().String(), tview.Styles.PrimaryTextColor, tview.Styles.PrimitiveBackgroundColor, tview.AlignLeft),
-		getTableCell(item.TargetVideoStats().String(), tview.Styles.PrimaryTextColor, tview.Styles.PrimitiveBackgroundColor, tview.AlignLeft),
-		getTableCell(status.String(), colorStatus(status), tview.Styles.PrimitiveBackgroundColor, tview.AlignLeft),
-		getTableCell(item.CompletedFormatted(), tview.Styles.PrimaryTextColor, tview.Styles.PrimitiveBackgroundColor, tview.AlignRight),
-		getTableCell(item.RemainingFormatted(), tview.Styles.PrimaryTextColor, tview.Styles.PrimitiveBackgroundColor, tview.AlignRight),
-		getTableCell(errString, tview.Styles.PrimaryTextColor, tview.Styles.PrimitiveBackgroundColor, tview.AlignLeft),
-	}
-}
-
-func (w *workItems) title(itemCount, rowCount int) string {
-	title := "files"
-	filtered := w.filters.Format()
-	if filtered != "" {
-		title += " (filtered: " + filtered + ")[" + strconv.Itoa(rowCount) + "/" + strconv.Itoa(itemCount) + "]"
-	} else {
-		title += " [" + strconv.Itoa(rowCount) + "]"
-	}
-	return " " + title + " "
-}
-
 func (w *workItems) HandleInput(event *tcell.EventKey) *tcell.EventKey {
 	if event.Key() != tcell.KeyRune {
 		return event
@@ -244,4 +209,39 @@ func (w *workItems) HandleInput(event *tcell.EventKey) *tcell.EventKey {
 		return nil
 	}
 	return event
+}
+
+func (w *workItems) buildRow(item *pipeline.WorkItem) []*tview.TableCell {
+	workStatus := item.WorkStatus()
+	if w.filters.on(workStatus.Status) {
+		return nil
+	}
+	source := item.Source.Path
+	if !w.fullName.Load() {
+		source = filepath.Base(source)
+	}
+	var errString string
+	if err := workStatus.Err; err != nil {
+		errString = err.Error()
+	}
+	return []*tview.TableCell{
+		getTableCell(source, tview.Styles.PrimaryTextColor, tview.Styles.PrimitiveBackgroundColor, tview.AlignLeft).SetReference(item),
+		getTableCell(item.SourceVideoStats().String(), tview.Styles.PrimaryTextColor, tview.Styles.PrimitiveBackgroundColor, tview.AlignLeft),
+		getTableCell(item.TargetVideoStats().String(), tview.Styles.PrimaryTextColor, tview.Styles.PrimitiveBackgroundColor, tview.AlignLeft),
+		getTableCell(workStatus.Status.String(), colorStatus(workStatus.Status), tview.Styles.PrimitiveBackgroundColor, tview.AlignLeft),
+		getTableCell(item.CompletedFormatted(), tview.Styles.PrimaryTextColor, tview.Styles.PrimitiveBackgroundColor, tview.AlignRight),
+		getTableCell(item.RemainingFormatted(), tview.Styles.PrimaryTextColor, tview.Styles.PrimitiveBackgroundColor, tview.AlignRight),
+		getTableCell(errString, tview.Styles.PrimaryTextColor, tview.Styles.PrimitiveBackgroundColor, tview.AlignLeft),
+	}
+}
+
+func (w *workItems) title(itemCount, rowCount int) string {
+	title := "files"
+	filtered := w.filters.format()
+	if filtered != "" {
+		title += " (filtered: " + filtered + ")[" + strconv.Itoa(rowCount) + "/" + strconv.Itoa(itemCount) + "]"
+	} else {
+		title += " [" + strconv.Itoa(rowCount) + "]"
+	}
+	return " " + title + " "
 }

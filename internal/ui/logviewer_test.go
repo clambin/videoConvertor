@@ -1,10 +1,11 @@
 package ui
 
 import (
-	"github.com/gdamore/tcell/v2"
-	"github.com/stretchr/testify/assert"
 	"log/slog"
 	"testing"
+
+	"github.com/gdamore/tcell/v2"
+	"github.com/stretchr/testify/assert"
 )
 
 func Test_logViewer(t *testing.T) {

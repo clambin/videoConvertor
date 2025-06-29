@@ -7,13 +7,13 @@ import (
 	"strings"
 )
 
-func buildTargetFilename(item *WorkItem, directory, codec, extension string) string {
+func buildTargetFilename(source MediaFile, directory, codec, extension string) string {
 	if directory == "" {
-		directory = filepath.Dir(item.Source)
+		directory = filepath.Dir(source.Path)
 	}
 	elements := make([]string, 0, 5)
-	elements = append(elements, getBasename(item.Source))
-	if height := item.SourceVideoStats().Height; height > 0 {
+	elements = append(elements, getBasename(source.Path))
+	if height := source.VideoStats.Height; height > 0 {
 		elements = append(elements, strconv.Itoa(height))
 	}
 	elements = append(elements, codec, extension)

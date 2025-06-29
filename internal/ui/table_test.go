@@ -23,9 +23,9 @@ func TestTable_Update(t *testing.T) {
 	}
 }
 
-// Current:
-// BenchmarkTable_Update-16           16092             74616 ns/op           33157 B/op       1001 allocs/op
 func BenchmarkTable_Update(b *testing.B) {
+	// Current:
+	// BenchmarkTable_Update-16           16092             74616 ns/op           33157 B/op       1001 allocs/op
 	dataSource := fakeDataSource{rows: make([]string, 1000)}
 	for i := range len(dataSource.rows) {
 		dataSource.rows[i] = strconv.Itoa(i)
@@ -38,7 +38,7 @@ func BenchmarkTable_Update(b *testing.B) {
 	}
 }
 
-var _ DataSource = &fakeDataSource{}
+var _ dataSource = &fakeDataSource{}
 
 type fakeDataSource struct {
 	rows []string
@@ -82,13 +82,12 @@ func TestCellAllocator(t *testing.T) {
 	assert.Equal(t, tcell.ColorRed, fg)
 	assert.Equal(t, tcell.ColorBlue, bg)
 	assert.Equal(t, tview.AlignRight, c.Align)
-
 }
 
-// Current:
-// BenchmarkCellPool/pool-16                 285660              4110 ns/op               0 B/op          0 allocs/op
-// BenchmarkCellPool/direct-16               155006              7744 ns/op           24000 B/op        100 allocs/op
 func BenchmarkCellPool(b *testing.B) {
+	// Current:
+	// BenchmarkCellPool/pool-10         	  615873	      1693 ns/op	       0 B/op	       0 allocs/op
+	// BenchmarkCellPool/direct-10       	  242312	      4471 ns/op	   28800 B/op	     100 allocs/op
 	const cellCount = 100
 	b.Run("pool", func(b *testing.B) {
 		b.ReportAllocs()

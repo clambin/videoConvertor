@@ -7,7 +7,7 @@ import (
 	"github.com/rivo/tview"
 )
 
-type DataSource interface {
+type dataSource interface {
 	Header() []*tview.TableCell
 	Update() Update
 	HandleInput(event *tcell.EventKey) *tcell.EventKey
@@ -21,15 +21,15 @@ type Update struct {
 
 type Table struct {
 	*tview.Table
-	DataSource DataSource
+	dataSource
 }
 
-func NewTable(source DataSource) *Table {
+func NewTable(source dataSource) *Table {
 	t := Table{
 		Table:      tview.NewTable(),
-		DataSource: source,
+		dataSource: source,
 	}
-	t.Table.SetEvaluateAllRows(true).
+	t.SetEvaluateAllRows(true).
 		SetFixed(1, 0).
 		SetSelectable(true, false).
 		Select(1, 0).
@@ -40,11 +40,11 @@ func NewTable(source DataSource) *Table {
 
 func (t *Table) Update() {
 	if t.GetRowCount() == 0 {
-		for i, h := range t.DataSource.Header() {
+		for i, h := range t.Header() {
 			t.SetCell(0, i, h)
 		}
 	}
-	update := t.DataSource.Update()
+	update := t.dataSource.Update()
 	t.SetTitle(update.Title)
 	for i, row := range update.Rows {
 		for j, cell := range row {
@@ -71,7 +71,7 @@ func (t *Table) trimRows(rows int) {
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////
 
-// cellPool reduces memory allocations for tview.TableCell objects
+// cellPool reduces memory allocations for tview.TableCell objects.
 var cellPool = sync.Pool{
 	New: func() any {
 		return tview.NewTableCell("")

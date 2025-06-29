@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/clambin/videoConvertor/ffmpeg"
+	"github.com/clambin/xcoder/ffmpeg"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -27,33 +27,29 @@ func TestQueue(t *testing.T) {
 		count++
 	}
 	assert.Equal(t, l.Size(), count)
-
 }
 
 func TestQueue_NextToConvert(t *testing.T) {
-	var l Queue
+	var queue Queue
 
 	// manually waiting items are returned even if the Queue is inactive
-	l.Queue(&WorkItem{Source: "foo"})
-	i := l.NextToConvert()
+	source := MediaFile{Path: "foo"}
+	queue.Queue(&WorkItem{Source: source})
+	i := queue.NextToConvert()
 	require.NotNil(t, i)
-	assert.Equal(t, "foo", i.Source)
-	status, err := i.Status()
-	assert.Equal(t, Converting, status)
-	assert.NoError(t, err)
+	assert.Equal(t, source, i.Source)
+	assert.Equal(t, WorkStatus{Status: Converting}, i.WorkStatus())
 
 	// automatically added items are not returned if the Queue is inactive
-	l.Add("foo").status = Inspected
-	i = l.NextToConvert()
+	queue.Add("foo").workStatus.Status = Inspected
+	i = queue.NextToConvert()
 	assert.Nil(t, i)
 
 	// automatically added items are not returned if the Queue is active
-	l.SetActive(true)
-	i = l.NextToConvert()
+	queue.SetActive(true)
+	i = queue.NextToConvert()
 	require.NotNil(t, i)
-	status, err = i.Status()
-	assert.Equal(t, Converting, status)
-	assert.NoError(t, err)
+	assert.Equal(t, WorkStatus{Status: Converting}, i.WorkStatus())
 }
 
 func TestQueue_Active(t *testing.T) {
@@ -65,19 +61,10 @@ func TestQueue_Active(t *testing.T) {
 	assert.False(t, l.Active())
 }
 
-func TestQueue_Stats(t *testing.T) {
-	stats := ffmpeg.VideoStats{VideoCodec: "h264", Height: 1080, BitRate: 5_000_000}
-	var item WorkItem
-	item.AddSourceStats(stats)
-	assert.Equal(t, stats, item.SourceVideoStats())
-	item.AddTargetStats(stats)
-	assert.Equal(t, stats, item.TargetVideoStats())
-}
-
 func TestWorkItem_RemainingFormatted(t *testing.T) {
 	tests := []struct {
 		name     string
-		status   WorkStatus
+		status   Status
 		input    time.Duration
 		expected string
 	}{
@@ -98,7 +85,7 @@ func TestWorkItem_RemainingFormatted(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			var item WorkItem
-			item.SetStatus(tt.status, nil)
+			item.SetWorkStatus(WorkStatus{Status: tt.status})
 			item.Progress.Duration = 2 * tt.input
 			item.Progress.Update(ffmpeg.Progress{Converted: tt.input, Speed: 1})
 			assert.Equal(t, tt.expected, item.RemainingFormatted())
@@ -109,7 +96,7 @@ func TestWorkItem_RemainingFormatted(t *testing.T) {
 func TestWorkItem_CompletedFormatted(t *testing.T) {
 	tests := []struct {
 		name   string
-		status WorkStatus
+		status Status
 		input  time.Duration
 		want   string
 	}{
@@ -123,7 +110,7 @@ func TestWorkItem_CompletedFormatted(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			var item WorkItem
-			item.SetStatus(tt.status, nil)
+			item.SetWorkStatus(WorkStatus{Status: tt.status})
 			item.Progress.Duration = time.Hour
 			item.Progress.Update(ffmpeg.Progress{Converted: tt.input, Speed: 1})
 			assert.Equal(t, tt.want, item.CompletedFormatted())
@@ -131,9 +118,34 @@ func TestWorkItem_CompletedFormatted(t *testing.T) {
 	}
 }
 
-func TestWorkStatus_String(t *testing.T) {
-	for val, label := range workStatusToString {
-		assert.Equal(t, label, val.String())
+func TestWorkItem_VideoStats(t *testing.T) {
+	i := &WorkItem{
+		Source: MediaFile{Path: "foo", VideoStats: ffmpeg.VideoStats{VideoCodec: "h264", Height: 1080, BitRate: 8_000_000}},
+		Target: MediaFile{Path: "bar", VideoStats: ffmpeg.VideoStats{VideoCodec: "hevc", Height: 1080, BitRate: 4_000_000}},
 	}
-	assert.Equal(t, "unknown", WorkStatus(-1).String())
+	assert.Equal(t, "h264/1080/8.00 mbps", i.SourceVideoStats().String())
+	assert.Equal(t, "hevc/1080/4.00 mbps", i.TargetVideoStats().String())
+}
+
+func TestWorkStatus_String(t *testing.T) {
+	tests := []struct {
+		want   string
+		status Status
+	}{
+		{"waiting", Waiting},
+		{"inspecting", Inspecting},
+		{"skipped", Skipped},
+		{"inspected", Inspected},
+		{"rejected", Rejected},
+		{"converting", Converting},
+		{"converted", Converted},
+		{"failed", Failed},
+		{"unknown", -1},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.want, func(t *testing.T) {
+			assert.Equal(t, tt.want, tt.status.String())
+		})
+	}
 }

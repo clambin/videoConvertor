@@ -3,11 +3,11 @@ package pipeline
 import (
 	"testing"
 
-	"github.com/clambin/videoConvertor/ffmpeg"
+	"github.com/clambin/xcoder/ffmpeg"
 	"github.com/stretchr/testify/assert"
 )
 
-func Test_makeTargetFilename(t *testing.T) {
+func Test_buildTargetFilename(t *testing.T) {
 	stats1080 := ffmpeg.VideoStats{Height: 1080}
 
 	tests := []struct {
@@ -35,7 +35,7 @@ func Test_makeTargetFilename(t *testing.T) {
 		},
 		{
 			name:   "series with spaces",
-			source: "/tmp/series 2024 S01E07 attrib attrib attrib.mkv",
+			source: "/tmp/series 2024 S01E07 attrib1 attrib2 attrib3.mkv",
 			stats:  stats1080,
 			want:   "/directory/series 2024.s01e07.1080.hevc.mkv",
 		},
@@ -72,9 +72,7 @@ func Test_makeTargetFilename(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			item := WorkItem{Source: tt.source}
-			item.AddSourceStats(tt.stats)
-			target := buildTargetFilename(&item, "/directory", "hevc", "mkv")
+			target := buildTargetFilename(MediaFile{Path: tt.source, VideoStats: tt.stats}, "/directory", "hevc", "mkv")
 			assert.Equal(t, tt.want, target)
 		})
 	}

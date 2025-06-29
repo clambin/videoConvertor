@@ -21,9 +21,9 @@ func TestScanFS(t *testing.T) {
 	errCh := make(chan error)
 	go func() { errCh <- ScanFS(t.Context(), fs, "/", &list, ch, slog.Default()) }()
 	item := <-ch
-	assert.Equal(t, "/foo/video.MKV", item.Source)
-	assert.NoError(t, <-errCh)
+	assert.Equal(t, "/foo/video.MKV", item.Source.Path)
+	require.NoError(t, <-errCh)
 
 	require.Len(t, list.List(), 1)
-	assert.Equal(t, "/foo/video.MKV", list.List()[0].Source)
+	assert.Equal(t, "/foo/video.MKV", list.List()[0].Source.Path)
 }
